@@ -1,0 +1,42 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python3 /tmp/clean_csv\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python3 << 'ENDSCRIPT'\nimport re\n\ninput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme\\.csv'\noutput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme_cleaned\\.csv'\n\nwith open\\(input_file, 'r', encoding='utf-8'\\) as f:\n    lines = f\\.readlines\\(\\)\n\ncleaned_lines = \\[\\]\nfor line in lines:\n    # 따옴표 내부의 텍스트 뒤 공백 제거: \"텍스트    \" → \"텍스트\"\n    # 이는 따옴표 사이의 모든 트레일링 공백을 제거합니다\n    modified = re\\.sub\\(r'\"\\(\\[\\^\"\\]\\*\\?\\)\\\\s\\+\\(\"\\)', r'\"\\\\1\\\\2', line\\)\n    cleaned_lines\\.append\\(modified\\)\n\nwith open\\(output_file, 'w', encoding='utf-8'\\) as f:\n    f\\.writelines\\(cleaned_lines\\)\n\nprint\\(\"✓ 완료: \" \\+ output_file\\)\nENDSCRIPT\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "mv": true,
+        "/^python3 << 'ENDSCRIPT'\nimport pandas as pd\nimport re\n\n# CSV 읽기\ndf = pd\\.read_csv\\('/Users/seulkiji/Downloads/qg5veXbw79S3ksme\\.csv'\\)\n\nprint\\(\"=== 현재 CSV 컬럼 ===\"\\)\nfor i, col in enumerate\\(df\\.columns, 1\\):\n    print\\(f\"\\{i\\}\\. \\{col\\}\"\\)\n\nprint\\(\"\\\\n=== 첫 5행 데이터 ===\"\\)\nprint\\(df\\.head\\(\\)\\)\n\nprint\\(f\"\\\\n=== 통계 ===\"\\)\nprint\\(f\"총 행수: \\{len\\(df\\)\\}\"\\)\nprint\\(f\"총 컬럼수: \\{len\\(df\\.columns\\)\\}\"\\)\n\nENDSCRIPT\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python3 << 'ENDSCRIPT'\nimport csv\nimport re\n\n# CSV 읽기\nwith open\\('/Users/seulkiji/Downloads/qg5veXbw79S3ksme\\.csv', 'r', encoding='utf-8'\\) as f:\n    reader = csv\\.DictReader\\(f\\)\n    rows = list\\(reader\\)\n    \nprint\\(\"=== CSV 컬럼 ===\"\\)\nfor i, col in enumerate\\(rows\\[0\\]\\.keys\\(\\), 1\\):\n    print\\(f\"\\{i\\}\\. \\{col\\}\"\\)\n\nprint\\(\"\\\\n=== 첫 3행 데이터 샘플 ===\"\\)\nfor i, row in enumerate\\(rows\\[:2\\], 1\\):\n    print\\(f\"\\\\n행 \\{i\\}:\"\\)\n    for k, v in row\\.items\\(\\):\n        print\\(f\"  \\{k\\}: \\{v\\}\"\\)\n\nENDSCRIPT\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python3 << 'ENDSCRIPT'\nimport csv\nimport re\n\ninput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme\\.csv'\noutput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme_for_bom_master\\.csv'\n\n# CSV 읽기\nwith open\\(input_file, 'r', encoding='utf-8'\\) as f:\n    reader = csv\\.DictReader\\(f\\)\n    rows = list\\(reader\\)\n\n# 변환된 데이터 저장\noutput_rows = \\[\\]\n\nfor row in rows:\n    # 숫자 정규화: \"1,000\\.000000\" → \"1000\\.000000\"\n    def normalize_numeric\\(value\\):\n        if not value or value\\.strip\\(\\) == '':\n            return ''\n        return value\\.replace\\(',', ''\\)\n    \n    # sort 값 추출 \\(품목구분 값\\)\n    품목구분 = row\\.get\\('품목구분', ''\\)\\.strip\\(\\) or None\n    \n    converted_row = \\{\n        '품목구분': 품목구분,\n        'bom버전': row\\.get\\('BOM버전', ''\\)\\.strip\\(\\) or None,\n        '생산품목명': row\\.get\\('생산품목명', ''\\)\\.strip\\(\\) or None,\n        'materialcode': row\\.get\\('소모품목코드', ''\\)\\.strip\\(\\) or None,\n        'materialname': row\\.get\\('소모품목명', ''\\)\\.strip\\(\\) or None,\n        'sort': 품목구분,  # sort = 품목구분 값\n        'usemount': normalize_numeric\\(row\\.get\\('소요량', ''\\)\\),\n        'prdcode': row\\.get\\('생산품목코드', ''\\)\\.strip\\(\\) or None,\n        'price': normalize_numeric\\(row\\.get\\('입고단가', ''\\)\\),\n        'company': row\\.get\\('구매처명', ''\\)\\.strip\\(\\) or None,\n        '구매처코드': row\\.get\\('구매처코드', ''\\)\\.strip\\(\\) or None,\n        'remerk': row\\.get\\('적요', ''\\)\\.strip\\(\\) or None,\n    \\}\n    output_rows\\.append\\(converted_row\\)\n\n# 새 CSV 저장\nfieldnames = \\['품목구분', 'bom버전', '생산품목명', 'materialcode', 'materialname', \n              'sort', 'usemount', 'prdcode', 'price', 'company', '구매처코드', 'remerk'\\]\n\nwith open\\(output_file, 'w', encoding='utf-8', newline=''\\) as f:\n    writer = csv\\.DictWriter\\(f, fieldnames=fieldnames\\)\n    writer\\.writeheader\\(\\)\n    writer\\.writerows\\(output_rows\\)\n\nprint\\(f\"✓ 변환 완료: \\{output_file\\}\"\\)\nprint\\(f\"생성된 레코드: \\{len\\(output_rows\\)\\}개\"\\)\n\nENDSCRIPT\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python3 /tmp/convert_to_bom\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "clear": true,
+        "/^python3 << 'EOF'\nimport csv\ninput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme\\.csv'\noutput_file = '/Users/seulkiji/Downloads/qg5veXbw79S3ksme_for_bom_master\\.csv'\nwith open\\(input_file, 'r', encoding='utf-8'\\) as f:\n    reader = csv\\.DictReader\\(f\\)\n    rows = list\\(reader\\)\noutput_rows = \\[\\]\ndef normalize_numeric\\(value\\):\n    if not value or value\\.strip\\(\\) == '':\n        return ''\n    return value\\.replace\\(',', ''\\)\nfor row in rows:\n    품목구분 = row\\.get\\('품목구분', ''\\)\\.strip\\(\\) or None\n    converted_row = \\{\n        '품목구분': 품목구분,\n        'bom버전': row\\.get\\('BOM버전', ''\\)\\.strip\\(\\) or None,\n        '생산품목명': row\\.get\\('생산품목명', ''\\)\\.strip\\(\\) or None,\n        'materialcode': row\\.get\\('소모품목코드', ''\\)\\.strip\\(\\) or None,\n        'materialname': row\\.get\\('소모품목명', ''\\)\\.strip\\(\\) or None,\n        'sort': 품목구분,\n        'usemount': normalize_numeric\\(row\\.get\\('소요량', ''\\)\\),\n        'prdcode': row\\.get\\('생산품목코드', ''\\)\\.strip\\(\\) or None,\n        'price': normalize_numeric\\(row\\.get\\('입고단가', ''\\)\\),\n        'company': row\\.get\\('구매처명', ''\\)\\.strip\\(\\) or None,\n        '구매처코드': row\\.get\\('구매처코드', ''\\)\\.strip\\(\\) or None,\n        'remerk': row\\.get\\('적요', ''\\)\\.strip\\(\\) or None,\n    \\}\n    output_rows\\.append\\(converted_row\\)\nfieldnames = \\['품목구분', 'bom버전', '생산품목명', 'materialcode', 'materialname', 'sort', 'usemount', 'prdcode', 'price', 'company', '구매처코드', 'remerk'\\]\nwith open\\(output_file, 'w', encoding='utf-8', newline=''\\) as f:\n    writer = csv\\.DictWriter\\(f, fieldnames=fieldnames\\)\n    writer\\.writeheader\\(\\)\n    writer\\.writerows\\(output_rows\\)\nprint\\(f\"Complete: \\{len\\(output_rows\\)\\} records\"\\)\nEOF\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /Users/seulkiji/Downloads && python3 -c \"import csv; rows = list\\(csv\\.DictReader\\(open\\('qg5veXbw79S3ksme\\.csv'\\)\\)\\); print\\(f'OK: \\{len\\(rows\\)\\} records'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python3 convert\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
