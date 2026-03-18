@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import type { DocUrls } from '@/lib/doc-gen/types'
 
 // 리스팅 페이지 전체 컬럼
 export interface LabProductDetail {
@@ -154,6 +155,49 @@ export async function updateLabProduct(
 
   if (error) {
     console.error('updateLabProduct error:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+const DOC_URL_FIELDS = new Set([
+  'ingredients_en_pdf_url',
+  'ingredients_en_csv_url',
+  'formula_breakdown_pdf_url',
+  'formula_breakdown_csv_url',
+  'inci_summary_pdf_url',
+  'inci_summary_csv_url',
+])
+
+export async function updateProductDocUrls(
+  productCode: string,
+  urls: DocUrls
+): Promise<{ success: boolean; error?: string }> {
+  const filtered: Record<string, string> = {}
+  for (const [key, value] of Object.entries(urls)) {
+    if (!DOC_URL_FIELDS.has(key)) {
+      return { success: false, error: `허용되지 않는 필드: ${key}` }
+    }
+    if (value) filtered[key] = value
+  }
+
+  if (Object.keys(filtered).length === 0) {
+    return { success: false, error: '업데이트할 URL이 없습니다' }
+  }
+
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('labdoc_products')
+    .update({
+      ...filtered,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('product_code', productCode)
+
+  if (error) {
+    console.error('updateProductDocUrls error:', error)
     return { success: false, error: error.message }
   }
 

@@ -1,10 +1,25 @@
 import jsPDF from 'jspdf'
 
-// Use local font file from public folder
 const NANUM_GOTHIC_URL = '/fonts/NanumGothic.ttf'
 
 let fontLoaded = false
 let fontData: ArrayBuffer | null = null
+
+async function loadFontData(): Promise<ArrayBuffer> {
+    if (typeof window !== 'undefined') {
+        const response = await fetch(NANUM_GOTHIC_URL)
+        if (!response.ok) {
+            throw new Error(`Failed to load Korean font: ${response.status}`)
+        }
+        return response.arrayBuffer()
+    }
+
+    const { readFile } = await import('fs/promises')
+    const { join } = await import('path')
+    const fontPath = join(process.cwd(), 'public', 'fonts', 'NanumGothic.ttf')
+    const buffer = await readFile(fontPath)
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+}
 
 export async function loadKoreanFont(doc: jsPDF): Promise<void> {
     if (fontLoaded && fontData) {
@@ -13,12 +28,7 @@ export async function loadKoreanFont(doc: jsPDF): Promise<void> {
     }
 
     try {
-        const response = await fetch(NANUM_GOTHIC_URL)
-        if (!response.ok) {
-            throw new Error(`Failed to load Korean font: ${response.status}`)
-        }
-        
-        fontData = await response.arrayBuffer()
+        fontData = await loadFontData()
         fontLoaded = true
         registerFont(doc, fontData)
     } catch (error) {

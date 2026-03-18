@@ -3,7 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { fetchProductWithBom, type LabProduct, type NormalizedBomItem, type IngredientComponentRow } from "../../_lib/utils";
-import { Loader2, AlertCircle, Printer } from "lucide-react";
+import { Loader2, AlertCircle, Printer, FileDown } from "lucide-react";
+import { generateBreakdownPdf } from "@/lib/doc-gen/pdf-breakdown";
+import { generateCsv } from "@/lib/doc-gen/csv";
+import { uploadDocToStorage } from "@/lib/doc-gen/upload";
+import { updateProductDocUrls } from "@/app/products/actions";
+import { transformBreakdown } from "@/lib/doc-gen/transforms";
+import type { ProductMeta } from "@/lib/doc-gen/types";
+import { toast } from "sonner";
 
 interface BreakdownRow { rowIndex: number; isFirstOfRaw: boolean; rawMaterialName: string; rawMaterialCode: string; rawWtPercent: number; componentCount: number; componentInci: string; ratioInRaw: number; calculatedPercent: number; }
 
@@ -14,6 +21,7 @@ export default function BreakdownPage() {
   const [bomItems, setBomItems] = useState<NormalizedBomItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -41,6 +49,60 @@ export default function BreakdownPage() {
   }, [bomItems]);
 
   const totalCalculated = breakdownRows.reduce((sum, r) => sum + r.calculatedPercent, 0);
+
+  const handleGenerate = async () => {
+    if (!product) return;
+    setGenerating(true);
+    try {
+      const meta: ProductMeta = {
+        productCode: decodedProductCode,
+        englishName: product.english_name || "",
+        koreanName: product.korean_name || "",
+        packagingUnit: product.packaging_unit ?? undefined,
+        createdDate: product.created_date ?? undefined,
+      };
+
+      const { rows, total } = transformBreakdown(bomItems);
+
+      const pdfBlob = await generateBreakdownPdf(meta, rows, total);
+
+      const csvHeaders = ["No.", "Raw Material", "WT %", "Component INCI Name", "% in Raw", "% Calculated"];
+      const csvRows = rows.map((r) => [
+        r.isFirstOfGroup ? String(r.no) : "",
+        r.isFirstOfGroup ? r.rawMaterial : "",
+        r.isFirstOfGroup ? r.wtPercent.toFixed(5) : "",
+        r.componentInci,
+        r.ratioInRaw.toFixed(2),
+        r.calculatedPercent.toFixed(5),
+      ]);
+      csvRows.push(["", "", "", "", "Total Calculated", total.toFixed(5)]);
+
+      const csvBlob = generateCsv(csvHeaders, csvRows);
+
+      const pdfUrl = await uploadDocToStorage(
+        pdfBlob,
+        `products/${decodedProductCode}/formula-breakdown.pdf`,
+        "application/pdf"
+      );
+      const csvUrl = await uploadDocToStorage(
+        csvBlob,
+        `products/${decodedProductCode}/formula-breakdown.csv`,
+        "text/csv"
+      );
+
+      await updateProductDocUrls(decodedProductCode, {
+        formula_breakdown_pdf_url: pdfUrl,
+        formula_breakdown_csv_url: csvUrl,
+      });
+
+      toast.success("Formula Breakdown PDF/CSV 생성 완료");
+    } catch (error) {
+      toast.error("생성 실패: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handlePrint = () => window.print();
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={22} className="animate-spin text-amber-500" /></div>;
@@ -48,7 +110,13 @@ export default function BreakdownPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-end mb-4 print:hidden"><button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200"><Printer size={16} /> Print</button></div>
+      <div className="flex justify-end gap-2 mb-4 print:hidden">
+        <button onClick={handleGenerate} disabled={generating || loading} className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:opacity-50">
+          {generating ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+          {generating ? "Generating..." : "Generate CSV/PDF"}
+        </button>
+        <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200"><Printer size={16} /> Print</button>
+      </div>
       <div className="bg-white border-2 border-slate-800 print:border-black">
         <div className="text-center py-4 border-b-2 border-slate-800"><h1 className="text-lg font-bold tracking-wider text-slate-800">FORMULA BREAKDOWN</h1><p className="text-xs text-slate-500 mt-1">Raw Material Component Analysis</p></div>
         <div className="border-b border-slate-300 p-4 space-y-2 text-sm">

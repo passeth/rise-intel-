@@ -1864,10 +1864,16 @@ export type Database = {
           created_date: string | null
           dosage: string | null
           english_name: string | null
-          fill_volume: string | null
-          functional_claim: string | null
-          id: string
-          korean_name: string | null
+           fill_volume: string | null
+           formula_breakdown_csv_url: string | null
+           formula_breakdown_pdf_url: string | null
+           functional_claim: string | null
+           id: string
+           inci_summary_csv_url: string | null
+           inci_summary_pdf_url: string | null
+           ingredients_en_csv_url: string | null
+           ingredients_en_pdf_url: string | null
+           korean_name: string | null
           label_position: string | null
           label_volume: string | null
           management_code: string | null
@@ -1901,18 +1907,24 @@ export type Database = {
           created_date?: string | null
           dosage?: string | null
           english_name?: string | null
-          fill_volume?: string | null
-          functional_claim?: string | null
-          id?: string
-          korean_name?: string | null
-          label_position?: string | null
-          label_volume?: string | null
-          management_code?: string | null
-          p_product_code?: string | null
-          packaging_unit?: string | null
-          ph_standard?: string | null
-          product_code: string
-          raw_material_report?: number | null
+           fill_volume?: string | null
+           formula_breakdown_csv_url?: string | null
+           formula_breakdown_pdf_url?: string | null
+           functional_claim?: string | null
+           id?: string
+           inci_summary_csv_url?: string | null
+           inci_summary_pdf_url?: string | null
+           ingredients_en_csv_url?: string | null
+           ingredients_en_pdf_url?: string | null
+           korean_name?: string | null
+           label_position?: string | null
+           label_volume?: string | null
+           management_code?: string | null
+           p_product_code?: string | null
+           packaging_unit?: string | null
+           ph_standard?: string | null
+           product_code: string
+           raw_material_report?: number | null
           recommended_age?: string | null
           recycling_grade?: string | null
           remarks?: string | null
@@ -1938,18 +1950,24 @@ export type Database = {
           created_date?: string | null
           dosage?: string | null
           english_name?: string | null
-          fill_volume?: string | null
-          functional_claim?: string | null
-          id?: string
-          korean_name?: string | null
-          label_position?: string | null
-          label_volume?: string | null
-          management_code?: string | null
-          p_product_code?: string | null
-          packaging_unit?: string | null
-          ph_standard?: string | null
-          product_code?: string
-          raw_material_report?: number | null
+           fill_volume?: string | null
+           formula_breakdown_csv_url?: string | null
+           formula_breakdown_pdf_url?: string | null
+           functional_claim?: string | null
+           id?: string
+           inci_summary_csv_url?: string | null
+           inci_summary_pdf_url?: string | null
+           ingredients_en_csv_url?: string | null
+           ingredients_en_pdf_url?: string | null
+           korean_name?: string | null
+           label_position?: string | null
+           label_volume?: string | null
+           management_code?: string | null
+           p_product_code?: string | null
+           packaging_unit?: string | null
+           ph_standard?: string | null
+           product_code?: string
+           raw_material_report?: number | null
           recommended_age?: string | null
           recycling_grade?: string | null
           remarks?: string | null

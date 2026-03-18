@@ -3,7 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { fetchProductWithBom, type LabProduct, type NormalizedBomItem } from "../../_lib/utils";
-import { Loader2, AlertCircle, Printer } from "lucide-react";
+import { Loader2, AlertCircle, Printer, FileDown } from "lucide-react";
+import { generateIngredientsEnPdf } from "@/lib/doc-gen/pdf-ingredients-en";
+import { generateCsv } from "@/lib/doc-gen/csv";
+import { uploadDocToStorage } from "@/lib/doc-gen/upload";
+import { updateProductDocUrls } from "@/app/products/actions";
+import { transformIngredientsEn } from "@/lib/doc-gen/transforms";
+import type { ProductMeta } from "@/lib/doc-gen/types";
+import { toast } from "sonner";
 
 interface EnglishIngredientRow { no: number; code: string; ingredientName: string; wtPercent: number; source: string; casNo: string; function: string; }
 
@@ -16,6 +23,7 @@ export default function EnglishIngredientsPage() {
   const [bomItems, setBomItems] = useState<NormalizedBomItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -60,12 +68,87 @@ export default function EnglishIngredientsPage() {
   const totalPercent = englishIngredients.reduce((sum, r) => sum + r.wtPercent, 0);
   const handlePrint = () => window.print();
 
+  const handleGenerate = useCallback(async () => {
+    if (!product) return;
+    setGenerating(true);
+    try {
+      const meta: ProductMeta = {
+        productCode: product.product_code,
+        englishName: product.english_name ?? "",
+        koreanName: product.korean_name ?? "",
+        packagingUnit: product.packaging_unit ?? undefined,
+        createdDate: product.created_date ?? undefined,
+      };
+
+      const { rows, allergens } = transformIngredientsEn(bomItems);
+
+      const pdfBlob = await generateIngredientsEnPdf(meta, rows, allergens);
+
+      const csvHeaders = ["NO.", "Ingredient Name", "%(W/W)", "Source", "CAS No", "Function"];
+      const csvRows: string[][] = [
+        ...englishIngredients.map((r) => [
+          String(r.no),
+          r.ingredientName,
+          r.wtPercent >= 99.99 ? "To. 100" : r.wtPercent.toFixed(5),
+          r.source,
+          r.casNo,
+          r.function,
+        ]),
+        ["", "", "", "", "", ""],
+        ["", "Total", totalPercent.toFixed(5), "", "", ""],
+      ];
+
+      if (fragranceAllergens.length > 0) {
+        csvRows.push(["", "", "", "", "", ""]);
+        csvRows.push(["Fragrance Allergens Ingredients", "", "", "", "", ""]);
+        csvRows.push(["NO.", "INCI Name", "CAS No", "%(W/W)", "", ""]);
+        fragranceAllergens.forEach((a, idx) => {
+          csvRows.push([String(idx + 1), a.name, a.casNo, a.wtPercent.toFixed(5), "", ""]);
+        });
+      }
+
+      const csvBlob = generateCsv(csvHeaders, csvRows);
+
+      const pdfUrl = await uploadDocToStorage(
+        pdfBlob,
+        "products/" + decodedProductCode + "/ingredients-en.pdf",
+        "application/pdf"
+      );
+      const csvUrl = await uploadDocToStorage(
+        csvBlob,
+        "products/" + decodedProductCode + "/ingredients-en.csv",
+        "text/csv"
+      );
+
+      const result = await updateProductDocUrls(decodedProductCode, {
+        ingredients_en_pdf_url: pdfUrl,
+        ingredients_en_csv_url: csvUrl,
+      });
+
+      if (result.success) {
+        toast.success("성분표(EN) PDF/CSV 생성 완료");
+      } else {
+        toast.error("저장 실패: " + (result.error || "Unknown error"));
+      }
+    } catch (error) {
+      toast.error("생성 실패: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setGenerating(false);
+    }
+  }, [product, bomItems, englishIngredients, fragranceAllergens, totalPercent, decodedProductCode]);
+
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={22} className="animate-spin text-amber-500" /></div>;
   if (error || !product) return <div className="bg-white rounded-xl border border-slate-200 p-12 text-center"><AlertCircle size={48} className="mx-auto text-red-400 mb-3" /><p className="text-red-500 text-sm">{error || "Product not found"}</p></div>;
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-end mb-4 print:hidden"><button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200"><Printer size={16} /> Print</button></div>
+      <div className="flex justify-end gap-2 mb-4 print:hidden">
+        <button onClick={handleGenerate} disabled={generating || loading} className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:opacity-50">
+          {generating ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+          {generating ? "Generating..." : "Generate CSV/PDF"}
+        </button>
+        <button onClick={handlePrint} className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm hover:bg-slate-200"><Printer size={16} /> Print</button>
+      </div>
       <div className="bg-white border-2 border-slate-800 print:border-black">
         <div className="text-center py-4 border-b-2 border-slate-800"><h1 className="text-lg font-bold tracking-wider text-slate-800">FORMULA INGREDIENTS STATEMENT</h1></div>
         <div className="border-b border-slate-300 p-4 space-y-2 text-sm">
