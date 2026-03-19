@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Fragment, useMemo, useState, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -224,8 +225,14 @@ function ExpandedIngredientDetail({ details }: { details: MissingDocDetail[] }) 
           <TableBody>
             {details.map((detail) => (
               <TableRow key={detail.ingredient_code} className="border-b border-[#E5E5E5]">
-                <TableCell className="font-mono text-xs text-[#1A1A1A]">
-                  {detail.ingredient_code}
+                <TableCell className="font-mono text-xs">
+                  <Link
+                    href={`/ingredients/${detail.ingredient_code}`}
+                    className="text-blue-600 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {detail.ingredient_code}
+                  </Link>
                 </TableCell>
                 <TableCell className="text-xs text-[#1A1A1A]">
                   {renderDash(detail.ingredient_name)}

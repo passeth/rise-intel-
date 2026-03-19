@@ -63,7 +63,7 @@ export const CPNP_DOCUMENT_TYPES: CpnpDocumentTypeInfo[] = [
     labelEn: 'Material Safety Data Sheet',
     icon: Shield,
     description: '물질안전보건자료 (영문)',
-    autoGeneratable: false,
+    autoGeneratable: true,
     category: 'generate',
   },
   {
@@ -72,7 +72,7 @@ export const CPNP_DOCUMENT_TYPES: CpnpDocumentTypeInfo[] = [
     labelEn: 'Preservative Efficacy Test',
     icon: FlaskConical,
     description: '방부력 시험 (ISO 11930)',
-    autoGeneratable: false,
+    autoGeneratable: true,
     category: 'generate',
   },
   {
@@ -81,7 +81,7 @@ export const CPNP_DOCUMENT_TYPES: CpnpDocumentTypeInfo[] = [
     labelEn: 'Stability Test',
     icon: FlaskConical,
     description: '안정성 시험 (3개월)',
-    autoGeneratable: false,
+    autoGeneratable: true,
     category: 'generate',
   },
   {
@@ -90,7 +90,7 @@ export const CPNP_DOCUMENT_TYPES: CpnpDocumentTypeInfo[] = [
     labelEn: 'Microbial Limit Test',
     icon: FlaskConical,
     description: '미생물한도시험',
-    autoGeneratable: false,
+    autoGeneratable: true,
     category: 'generate',
   },
 ]

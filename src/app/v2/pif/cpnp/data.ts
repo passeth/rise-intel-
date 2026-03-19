@@ -11,9 +11,162 @@ import type {
   CpnpFragranceAllergen,
   CpnpIngredientDoc,
   CpnpInci,
+  CpnpPetCertificate,
+  CpnpPetResult,
+  CpnpStabilityCertificate,
+  CpnpStabilityMeasurement,
+  CpnpMltCertificate,
+  CpnpMltResult,
 } from './types'
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function asUnknownArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+async function fetchLatestTestCertificate(
+  supabase: SupabaseClient,
+  productCode: string,
+  qcType: string
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase
+    .from('labdoc_test_certificates')
+    .select('*')
+    .eq('product_code', productCode)
+    .eq('qc_type', qcType)
+    .order('test_date', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data as Record<string, unknown>
+}
+
+function parseCertificateBase(
+  raw: Record<string, unknown>
+): {
+  certificate_no: string | null
+  lot_no: string | null
+  test_date: string | null
+  judgment_date: string | null
+  overall_judgment: string | null
+  approver: string | null
+  tester: string | null
+} {
+  return {
+    certificate_no: asString(raw.certificate_no),
+    lot_no: asString(raw.lot_no),
+    test_date: asString(raw.test_date),
+    judgment_date: asString(raw.judgment_date),
+    overall_judgment: asString(raw.overall_judgment),
+    approver: asString(raw.approver),
+    tester: asString(raw.tester),
+  }
+}
+
+function parsePetResults(raw: unknown): CpnpPetResult[] {
+  return asUnknownArray(raw)
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map((item) => ({
+      organism: asString(item.organism) ?? asString(item.test_item) ?? '—',
+      atcc: asString(item.atcc),
+      initial_count: asString(item.initial_count) ?? asString(item.count_d0),
+      log_reduction_d7: asString(item.log_reduction_d7) ?? asString(item.d7),
+      log_reduction_d14: asString(item.log_reduction_d14) ?? asString(item.d14),
+      log_reduction_d28: asString(item.log_reduction_d28) ?? asString(item.d28),
+      conclusion: asString(item.conclusion) ?? asString(item.judgment),
+    }))
+}
+
+function parseStabilityResults(raw: unknown): CpnpStabilityMeasurement[] {
+  return asUnknownArray(raw)
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map((item) => ({
+      parameter: asString(item.parameter) ?? asString(item.test_item) ?? '—',
+      temperature: asString(item.temperature) ?? asString(item.condition) ?? '—',
+      day_0: asString(item.day_0) ?? asString(item.d0),
+      day_14: asString(item.day_14) ?? asString(item.d14),
+      month_1: asString(item.month_1) ?? asString(item.m1),
+      month_2: asString(item.month_2) ?? asString(item.m2),
+      month_3: asString(item.month_3) ?? asString(item.m3),
+    }))
+}
+
+function parseMltResults(raw: unknown): CpnpMltResult[] {
+  return asUnknownArray(raw)
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map((item) => ({
+      test_item: asString(item.test_item) ?? asString(item.organism) ?? '—',
+      specification: asString(item.specification) ?? '—',
+      result: asString(item.result),
+    }))
+}
+
+function parsePetCertificate(raw: Record<string, unknown> | null): CpnpPetCertificate | null {
+  if (!raw) {
+    return null
+  }
+
+  return {
+    ...parseCertificateBase(raw),
+    lab_no: asString(raw.lab_no),
+    test_start_date: asString(raw.test_start_date),
+    test_end_date: asString(raw.test_end_date),
+    criteria: asString(raw.criteria),
+    results: parsePetResults(raw.results),
+  }
+}
+
+function parseStabilityCertificate(
+  raw: Record<string, unknown> | null
+): CpnpStabilityCertificate | null {
+  if (!raw) {
+    return null
+  }
+
+  return {
+    ...parseCertificateBase(raw),
+    manufacturing_date: asString(raw.manufacture_date),
+    specifications: asString(raw.specifications),
+    results: parseStabilityResults(raw.results),
+  }
+}
+
+function parseMltCertificate(raw: Record<string, unknown> | null): CpnpMltCertificate | null {
+  if (!raw) {
+    return null
+  }
+
+  return {
+    ...parseCertificateBase(raw),
+    test_start_date: asString(raw.test_start_date),
+    test_end_date: asString(raw.test_end_date),
+    method: asString(raw.method),
+    results: parseMltResults(raw.results),
+  }
+}
 
 function normalizeIngredientCode(code: string): string {
   if (/^[A-Z]{3}-[0-9]{4}[A-Z]-/.test(code)) {
@@ -163,6 +316,9 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
     fragranceAllergens,
     ingredientDocs,
     inciResult,
+    petCertificateRaw,
+    stabilityCertificateRaw,
+    mltCertificateRaw,
   ] = await Promise.all([
     supabase
       .from('labdoc_product_qc_specs')
@@ -183,6 +339,9 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
       .select('inci_ko, inci_en, inci_cpnp')
       .eq('product_code', productCode)
       .maybeSingle(),
+    fetchLatestTestCertificate(supabase, productCode, 'pet'),
+    fetchLatestTestCertificate(supabase, productCode, 'stability'),
+    fetchLatestTestCertificate(supabase, productCode, 'mlt'),
   ])
 
   const qcSpecs: CpnpQcSpec[] = (qcSpecsResult.data ?? []).map((row) => ({
@@ -218,6 +377,10 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
       }
     : null
 
+  const petCertificate = parsePetCertificate(petCertificateRaw)
+  const stabilityCertificate = parseStabilityCertificate(stabilityCertificateRaw)
+  const mltCertificate = parseMltCertificate(mltCertificateRaw)
+
   return {
     product,
     bom,
@@ -227,6 +390,9 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
     fragranceAllergens,
     ingredientDocs,
     inci,
+    petCertificate,
+    stabilityCertificate,
+    mltCertificate,
   }
 }
 

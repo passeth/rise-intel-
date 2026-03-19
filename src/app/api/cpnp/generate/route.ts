@@ -29,6 +29,10 @@ const AUTO_GENERATABLE_TYPES = [
   'allergen_list',
   'specification',
   'coa',
+  'msds',
+  'pet',
+  'stability',
+  'mlt',
 ] as const
 
 type AutoGeneratableDocumentType = (typeof AUTO_GENERATABLE_TYPES)[number]
@@ -95,6 +99,10 @@ export async function POST(request: NextRequest) {
     const { generateAllergenListPdf } = await import('@/lib/doc-gen/cpnp/pdf-allergen-list')
     const { generateSpecificationPdf } = await import('@/lib/doc-gen/cpnp/pdf-specification')
     const { generateCoaPdf } = await import('@/lib/doc-gen/cpnp/pdf-coa')
+    const { generateMsdsPdf } = await import('@/lib/doc-gen/cpnp/pdf-msds')
+    const { generatePetPdf } = await import('@/lib/doc-gen/cpnp/pdf-pet')
+    const { generateStabilityPdf } = await import('@/lib/doc-gen/cpnp/pdf-stability')
+    const { generateMltPdf } = await import('@/lib/doc-gen/cpnp/pdf-mlt')
 
     const generators: Record<AutoGeneratableDocumentType, GeneratorFn> = {
       composition_formula: generateCompositionFormulaPdf,
@@ -102,6 +110,10 @@ export async function POST(request: NextRequest) {
       allergen_list: generateAllergenListPdf,
       specification: generateSpecificationPdf,
       coa: generateCoaPdf,
+      msds: generateMsdsPdf,
+      pet: generatePetPdf,
+      stability: generateStabilityPdf,
+      mlt: generateMltPdf,
     }
 
     const supabase = await createClient()
