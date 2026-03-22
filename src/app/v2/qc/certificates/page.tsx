@@ -17,6 +17,10 @@ import {
   updateCertificatePdfUrl,
   type TestCertificate,
   type CertificateResult,
+  type CertificateResultsRow,
+  type PetCertificateResult,
+  type StabilityCertificateResult,
+  type MltCertificateResult,
   type SortField,
   type SortDirection,
 } from './actions'
@@ -40,10 +44,205 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Plus, Download, FileText, Search, Eye, X, Pencil, Save, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Trash2 } from 'lucide-react'
 
-const QC_TYPES = ['반제품', '완제품', '영문'] as const
+const QC_TYPES = ['반제품', '완제품', '영문', 'pet', 'stability', 'mlt'] as const
 type QcType = (typeof QC_TYPES)[number]
 
+const BASIC_QC_TYPES = ['반제품', '완제품', '영문'] as const
+
+const QC_TYPE_LABEL: Record<QcType, string> = {
+  반제품: '반제품',
+  완제품: '완제품',
+  영문: '영문',
+  pet: 'PET',
+  stability: 'Stability',
+  mlt: 'MLT',
+}
+
 const PAGE_SIZE = 50
+
+function isBasicQcType(qcType: string): qcType is (typeof BASIC_QC_TYPES)[number] {
+  return BASIC_QC_TYPES.includes(qcType as (typeof BASIC_QC_TYPES)[number])
+}
+
+function isPetQcType(qcType: string): qcType is 'pet' {
+  return qcType === 'pet'
+}
+
+function isStabilityQcType(qcType: string): qcType is 'stability' {
+  return qcType === 'stability'
+}
+
+function isMltQcType(qcType: string): qcType is 'mlt' {
+  return qcType === 'mlt'
+}
+
+function createPetDefaultRows(): PetCertificateResult[] {
+  return [
+    {
+      organism: 'S. aureus',
+      atcc: 'ATCC 6538',
+      initial_count: '',
+      log_reduction_d7: '',
+      log_reduction_d14: '',
+      log_reduction_d28: '',
+      conclusion: '',
+    },
+    {
+      organism: 'P. aeruginosa',
+      atcc: 'ATCC 9027',
+      initial_count: '',
+      log_reduction_d7: '',
+      log_reduction_d14: '',
+      log_reduction_d28: '',
+      conclusion: '',
+    },
+    {
+      organism: 'E. coli',
+      atcc: 'ATCC 8739',
+      initial_count: '',
+      log_reduction_d7: '',
+      log_reduction_d14: '',
+      log_reduction_d28: '',
+      conclusion: '',
+    },
+    {
+      organism: 'C. albicans',
+      atcc: 'ATCC 10231',
+      initial_count: '',
+      log_reduction_d7: '',
+      log_reduction_d14: '',
+      log_reduction_d28: '',
+      conclusion: '',
+    },
+    {
+      organism: 'A. brasiliensis',
+      atcc: 'ATCC 16404',
+      initial_count: '',
+      log_reduction_d7: '',
+      log_reduction_d14: '',
+      log_reduction_d28: '',
+      conclusion: '',
+    },
+  ]
+}
+
+function createStabilityDefaultRows(): StabilityCertificateResult[] {
+  const temperatures = ['4°C', '25°C / 60% RH', '45°C / 75% RH']
+  const parameters = ['Appearance', 'Color', 'Odour', 'pH', 'Viscosity']
+  return temperatures.flatMap((temperature) =>
+    parameters.map((parameter) => ({
+      parameter,
+      temperature,
+      day_0: '',
+      day_14: '',
+      month_1: '',
+      month_2: '',
+      month_3: '',
+    }))
+  )
+}
+
+function createMltDefaultRows(): MltCertificateResult[] {
+  return [
+    {
+      test_item: 'Total Aerobic Microbial Count',
+      specification: '<= 1,000 CFU/g(ml)',
+      result: '',
+    },
+    {
+      test_item: 'Total Combined Yeasts & Molds Count',
+      specification: '<= 100 CFU/g(ml)',
+      result: '',
+    },
+    {
+      test_item: 'Escherichia coli',
+      specification: 'Not Detected in 1g(ml)',
+      result: '',
+    },
+    {
+      test_item: 'Pseudomonas aeruginosa',
+      specification: 'Not Detected in 1g(ml)',
+      result: '',
+    },
+    {
+      test_item: 'Staphylococcus aureus',
+      specification: 'Not Detected in 1g(ml)',
+      result: '',
+    },
+    {
+      test_item: 'Candida albicans',
+      specification: 'Not Detected in 1g(ml)',
+      result: '',
+    },
+  ]
+}
+
+type CertificateNotesMetadata = {
+  lab_no?: string
+  criteria?: string
+  test_start_date?: string
+  test_end_date?: string
+  method?: string
+  specifications?: string
+}
+
+function parseCertificateNotes(notes: string | null | undefined): CertificateNotesMetadata {
+  if (!notes) {
+    return {}
+  }
+  try {
+    const parsed: unknown = JSON.parse(notes)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+    const safe = parsed as Record<string, unknown>
+    const read = (key: string) =>
+      typeof safe[key] === 'string' && safe[key]?.trim() ? safe[key].trim() : undefined
+    return {
+      lab_no: read('lab_no'),
+      criteria: read('criteria'),
+      test_start_date: read('test_start_date'),
+      test_end_date: read('test_end_date'),
+      method: read('method'),
+      specifications: read('specifications'),
+    }
+  } catch {
+    return {}
+  }
+}
+
+function buildCertificateNotes(
+  qcType: QcType,
+  metadata: CertificateNotesMetadata
+): string | undefined {
+  if (isBasicQcType(qcType)) {
+    return undefined
+  }
+
+  const notes: CertificateNotesMetadata = {}
+
+  if (isPetQcType(qcType)) {
+    if (metadata.lab_no) notes.lab_no = metadata.lab_no
+    if (metadata.criteria) notes.criteria = metadata.criteria
+    if (metadata.test_start_date) notes.test_start_date = metadata.test_start_date
+    if (metadata.test_end_date) notes.test_end_date = metadata.test_end_date
+  }
+
+  if (isStabilityQcType(qcType)) {
+    if (metadata.specifications) notes.specifications = metadata.specifications
+  }
+
+  if (isMltQcType(qcType)) {
+    if (metadata.method) notes.method = metadata.method
+    if (metadata.test_start_date) notes.test_start_date = metadata.test_start_date
+    if (metadata.test_end_date) notes.test_end_date = metadata.test_end_date
+  }
+
+  if (Object.keys(notes).length === 0) {
+    return undefined
+  }
+  return JSON.stringify(notes)
+}
 
 function getYearOptions(): number[] {
   const currentYear = new Date().getFullYear()
@@ -133,6 +332,15 @@ export default function CertificatesPage() {
             </TabsTrigger>
             <TabsTrigger value="영문" className="text-sm px-4">
               영문
+            </TabsTrigger>
+            <TabsTrigger value="pet" className="text-sm px-4">
+              PET
+            </TabsTrigger>
+            <TabsTrigger value="stability" className="text-sm px-4">
+              Stability
+            </TabsTrigger>
+            <TabsTrigger value="mlt" className="text-sm px-4">
+              MLT
             </TabsTrigger>
           </TabsList>
 
@@ -282,11 +490,18 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
     tester: '',
     approver: '',
     overall_judgment: '',
-    results: [] as CertificateResult[],
+    lab_no: '',
+    criteria: 'A',
+    test_start_date: '',
+    test_end_date: '',
+    method: '',
+    specifications: '',
+    results: [] as CertificateResultsRow[],
   })
 
   const startEditing = () => {
     if (certificate) {
+      const notesMetadata = parseCertificateNotes(certificate.notes)
       setEditData({
         lot_no: certificate.lot_no || '',
         manufacture_date: certificate.manufacture_date || '',
@@ -301,6 +516,12 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
         tester: certificate.tester || '',
         approver: certificate.approver || '',
         overall_judgment: certificate.overall_judgment || '적합',
+        lab_no: notesMetadata.lab_no || '',
+        criteria: notesMetadata.criteria || 'A',
+        test_start_date: notesMetadata.test_start_date || '',
+        test_end_date: notesMetadata.test_end_date || '',
+        method: notesMetadata.method || '',
+        specifications: notesMetadata.specifications || '',
         results: certificate.results?.map(r => ({ ...r })) || [],
       })
       setIsEditing(true)
@@ -315,7 +536,7 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
     setEditData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleResultChange = (index: number, field: keyof CertificateResult, value: string) => {
+  const handleResultChange = (index: number, field: string, value: string) => {
     setEditData(prev => ({
       ...prev,
       results: prev.results.map((r, i) => i === index ? { ...r, [field]: value } : r)
@@ -323,6 +544,59 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
   }
 
   const addEditResult = () => {
+    if (certificate?.qc_type === 'pet') {
+      setEditData((prev) => ({
+        ...prev,
+        results: [
+          ...prev.results,
+          {
+            organism: '',
+            atcc: '',
+            initial_count: '',
+            log_reduction_d7: '',
+            log_reduction_d14: '',
+            log_reduction_d28: '',
+            conclusion: '',
+          },
+        ],
+      }))
+      return
+    }
+
+    if (certificate?.qc_type === 'stability') {
+      setEditData((prev) => ({
+        ...prev,
+        results: [
+          ...prev.results,
+          {
+            parameter: '',
+            temperature: '',
+            day_0: '',
+            day_14: '',
+            month_1: '',
+            month_2: '',
+            month_3: '',
+          },
+        ],
+      }))
+      return
+    }
+
+    if (certificate?.qc_type === 'mlt') {
+      setEditData((prev) => ({
+        ...prev,
+        results: [
+          ...prev.results,
+          {
+            test_item: '',
+            specification: '',
+            result: '',
+          },
+        ],
+      }))
+      return
+    }
+
     setEditData(prev => ({
       ...prev,
       results: [...prev.results, {
@@ -347,10 +621,22 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
     if (!certificate) return
     setIsSaving(true)
     try {
-      const overallJudgment = editData.results.every(r => r.judgment === '적합') ? '적합' : '부적합'
+      const overallJudgment = isBasicType
+        ? (editData.results as CertificateResult[]).every((r) => r.judgment === '적합')
+          ? '적합'
+          : '부적합'
+        : (editData.overall_judgment || '적합')
       const { success: _success, error } = await updateCertificate(certificate.id, {
         ...editData,
         overall_judgment: overallJudgment,
+        notes: buildCertificateNotes(certificate.qc_type as QcType, {
+          lab_no: editData.lab_no,
+          criteria: editData.criteria,
+          test_start_date: editData.test_start_date,
+          test_end_date: editData.test_end_date,
+          method: editData.method,
+          specifications: editData.specifications,
+        }),
       })
       if (error) {
         toast.error('저장 실패: ' + error)
@@ -369,7 +655,12 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
 
   if (!certificate) return null
 
+  const isBasicType = isBasicQcType(certificate.qc_type)
   const isEnglish = certificate.qc_type === '영문'
+  const isPet = isPetQcType(certificate.qc_type)
+  const isStability = isStabilityQcType(certificate.qc_type)
+  const isMlt = isMltQcType(certificate.qc_type)
+  const notesMetadata = parseCertificateNotes(certificate.notes)
   const displayData = isEditing ? editData : {
     lot_no: certificate.lot_no || '',
     manufacture_date: certificate.manufacture_date || '',
@@ -384,16 +675,30 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
     tester: certificate.tester || '',
     approver: certificate.approver || '',
     overall_judgment: certificate.overall_judgment || '',
+    lab_no: notesMetadata.lab_no || '',
+    criteria: notesMetadata.criteria || 'A',
+    test_start_date: notesMetadata.test_start_date || '',
+    test_end_date: notesMetadata.test_end_date || '',
+    method: notesMetadata.method || '',
+    specifications: notesMetadata.specifications || '',
     results: certificate.results || [],
   }
   const results = displayData.results
+  const standardResults = results as CertificateResult[]
+  const petResults = results as PetCertificateResult[]
+  const stabilityResults = results as StabilityCertificateResult[]
+  const mltResults = results as MltCertificateResult[]
 
   const handleDownloadPdf = async () => {
+    if (!isBasicType) {
+      toast.info('PET/Stability/MLT는 PDF 자동 발급 대상이 아닙니다')
+      return
+    }
     setIsGenerating(true)
     try {
       const pdfBlob = await generatePdf({
         certificate,
-        results,
+        results: standardResults,
         qcType: certificate.qc_type || '반제품',
         productName: certificate.product_name || '',
       })
@@ -438,6 +743,198 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  if (!isBasicType) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="w-[900px] max-w-[95vw] max-h-[95vh] overflow-y-auto p-0" showCloseButton={false} aria-describedby={undefined}>
+          <div className="sticky top-0 z-10 flex justify-between items-center px-4 py-2 bg-slate-50 border-b">
+            <DialogTitle className="text-sm font-medium text-slate-700">{QC_TYPE_LABEL[certificate.qc_type as QcType]} 성적 데이터</DialogTitle>
+            <div className="flex gap-2">
+              {isEditing ? (
+                <>
+                  <Button variant="default" size="sm" onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Save size={14} className="mr-1" />}
+                    {isSaving ? '저장 중...' : '저장'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={cancelEditing} disabled={isSaving}>취소</Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={startEditing}>
+                  <Pencil size={14} className="mr-1" /> 수정
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={onClose}><X size={14} /></Button>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div><span className="text-slate-500">제품</span><p className="font-medium">{certificate.product_name || certificate.product_code}</p></div>
+              <div><span className="text-slate-500">LOT</span><p className="font-medium">{displayData.lot_no || '—'}</p></div>
+              <div><span className="text-slate-500">시험일</span><p className="font-medium">{displayData.test_date || '—'}</p></div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {isPet && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Lab No.</label>
+                    {isEditing ? (
+                      <Input value={displayData.lab_no} onChange={(e) => handleEditChange('lab_no', e.target.value)} className="h-8" />
+                    ) : (
+                      <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.lab_no || '—'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Criteria</label>
+                    {isEditing ? (
+                      <Select value={displayData.criteria || 'A'} onValueChange={(v) => handleEditChange('criteria', v)}>
+                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A">A</SelectItem>
+                          <SelectItem value="B">B</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.criteria || 'A'}</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {(isPet || isMlt) && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">시험 시작일</label>
+                    {isEditing ? (
+                      <Input type="date" value={displayData.test_start_date} onChange={(e) => handleEditChange('test_start_date', e.target.value)} className="h-8" />
+                    ) : (
+                      <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.test_start_date || '—'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">시험 종료일</label>
+                    {isEditing ? (
+                      <Input type="date" value={displayData.test_end_date} onChange={(e) => handleEditChange('test_end_date', e.target.value)} className="h-8" />
+                    ) : (
+                      <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.test_end_date || '—'}</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {isMlt && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-slate-600">시험 방법(Method)</label>
+                  {isEditing ? (
+                    <Input value={displayData.method} onChange={(e) => handleEditChange('method', e.target.value)} className="h-8" />
+                  ) : (
+                    <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.method || '—'}</p>
+                  )}
+                </div>
+              )}
+
+              {isStability && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-slate-600">기타 규격 메모</label>
+                  {isEditing ? (
+                    <Input value={displayData.specifications} onChange={(e) => handleEditChange('specifications', e.target.value)} className="h-8" />
+                  ) : (
+                    <p className="text-sm border rounded-md h-8 px-3 flex items-center">{displayData.specifications || '—'}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {isPet && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험균주</th><th className="border px-2 py-2 bg-slate-50">ATCC</th><th className="border px-2 py-2 bg-slate-50">초기균수</th><th className="border px-2 py-2 bg-slate-50">D7</th><th className="border px-2 py-2 bg-slate-50">D14</th><th className="border px-2 py-2 bg-slate-50">D28</th><th className="border px-2 py-2 bg-slate-50">결론</th>{isEditing && <th className="border px-2 py-2 bg-slate-50 w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {petResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1">{isEditing ? <Input value={row.organism} onChange={(e) => handleResultChange(i, 'organism', e.target.value)} className="h-7 text-xs" /> : row.organism || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.atcc} onChange={(e) => handleResultChange(i, 'atcc', e.target.value)} className="h-7 text-xs" /> : row.atcc || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.initial_count} onChange={(e) => handleResultChange(i, 'initial_count', e.target.value)} className="h-7 text-xs" /> : row.initial_count || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.log_reduction_d7} onChange={(e) => handleResultChange(i, 'log_reduction_d7', e.target.value)} className="h-7 text-xs" /> : row.log_reduction_d7 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.log_reduction_d14} onChange={(e) => handleResultChange(i, 'log_reduction_d14', e.target.value)} className="h-7 text-xs" /> : row.log_reduction_d14 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.log_reduction_d28} onChange={(e) => handleResultChange(i, 'log_reduction_d28', e.target.value)} className="h-7 text-xs" /> : row.log_reduction_d28 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.conclusion} onChange={(e) => handleResultChange(i, 'conclusion', e.target.value)} className="h-7 text-xs" /> : row.conclusion || '—'}</td>
+                      {isEditing && <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeEditResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {isStability && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험항목</th><th className="border px-2 py-2 bg-slate-50">보관조건</th><th className="border px-2 py-2 bg-slate-50">Day 0</th><th className="border px-2 py-2 bg-slate-50">Day 14</th><th className="border px-2 py-2 bg-slate-50">1개월</th><th className="border px-2 py-2 bg-slate-50">2개월</th><th className="border px-2 py-2 bg-slate-50">3개월</th>{isEditing && <th className="border px-2 py-2 bg-slate-50 w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {stabilityResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1">{isEditing ? <Input value={row.parameter} onChange={(e) => handleResultChange(i, 'parameter', e.target.value)} className="h-7 text-xs" /> : row.parameter || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.temperature} onChange={(e) => handleResultChange(i, 'temperature', e.target.value)} className="h-7 text-xs" /> : row.temperature || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.day_0} onChange={(e) => handleResultChange(i, 'day_0', e.target.value)} className="h-7 text-xs" /> : row.day_0 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.day_14} onChange={(e) => handleResultChange(i, 'day_14', e.target.value)} className="h-7 text-xs" /> : row.day_14 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.month_1} onChange={(e) => handleResultChange(i, 'month_1', e.target.value)} className="h-7 text-xs" /> : row.month_1 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.month_2} onChange={(e) => handleResultChange(i, 'month_2', e.target.value)} className="h-7 text-xs" /> : row.month_2 || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.month_3} onChange={(e) => handleResultChange(i, 'month_3', e.target.value)} className="h-7 text-xs" /> : row.month_3 || '—'}</td>
+                      {isEditing && <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeEditResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {isMlt && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험항목</th><th className="border px-2 py-2 bg-slate-50">규격</th><th className="border px-2 py-2 bg-slate-50">결과</th>{isEditing && <th className="border px-2 py-2 bg-slate-50 w-8"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {mltResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1">{isEditing ? <Input value={row.test_item} onChange={(e) => handleResultChange(i, 'test_item', e.target.value)} className="h-7 text-xs" /> : row.test_item || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.specification} onChange={(e) => handleResultChange(i, 'specification', e.target.value)} className="h-7 text-xs" /> : row.specification || '—'}</td>
+                      <td className="border p-1">{isEditing ? <Input value={row.result} onChange={(e) => handleResultChange(i, 'result', e.target.value)} className="h-7 text-xs" /> : row.result || '—'}</td>
+                      {isEditing && <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeEditResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {isEditing && (
+              <div className="flex items-center justify-between">
+                <Button variant="outline" size="sm" onClick={addEditResult} className="gap-1 text-xs"><Plus size={12} /> 행 추가</Button>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-600">종합 판정</span>
+                  <Select value={editData.overall_judgment || '적합'} onValueChange={(v) => handleEditChange('overall_judgment', v)}>
+                    <SelectTrigger className="h-8 w-[120px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="적합">적합</SelectItem>
+                      <SelectItem value="부적합">부적합</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   if (isEnglish) {
@@ -517,7 +1014,7 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((r, i) => (
+                  {standardResults.map((r, i) => (
                     <tr key={i}>
                       <td className="border border-slate-400 px-3 py-2">{r.test_item}</td>
                       <td className="border border-slate-400 px-3 py-2">{r.specification || '—'}</td>
@@ -748,7 +1245,7 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
                       </tr>
                     </thead>
                     <tbody>
-                      {results.map((r, i) => (
+                      {standardResults.map((r, i) => (
                         <tr key={i}>
                           <th className="border border-black px-2 py-1.5 bg-gray-100 font-bold text-center">
                             {isEditing ? (
@@ -827,8 +1324,8 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
                       </tr>
                       <tr>
                         <th className="border border-black px-2 py-1.5 bg-gray-100 font-bold text-center">판정 결과</th>
-                        <td colSpan={3} className={`border border-black px-2 py-1.5 text-center font-bold ${(isEditing ? editData.results.every(r => r.judgment === '적합') : certificate.overall_judgment === '적합') ? 'text-green-700' : 'text-red-700'}`}>
-                          {isEditing ? (editData.results.every(r => r.judgment === '적합') ? '적합' : '부적합') : certificate.overall_judgment}
+                        <td colSpan={3} className={`border border-black px-2 py-1.5 text-center font-bold ${(isEditing ? (editData.results as CertificateResult[]).every(r => r.judgment === '적합') : certificate.overall_judgment === '적합') ? 'text-green-700' : 'text-red-700'}`}>
+                          {isEditing ? ((editData.results as CertificateResult[]).every(r => r.judgment === '적합') ? '적합' : '부적합') : certificate.overall_judgment}
                         </td>
                       </tr>
                       <tr>
@@ -1102,9 +1599,16 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
   const [judgmentDate, setJudgmentDate] = useState(
     new Date().toISOString().slice(0, 10)
   )
+  const [manualOverallJudgment, setManualOverallJudgment] = useState<'적합' | '부적합'>('적합')
+  const [labNo, setLabNo] = useState('')
+  const [criteria, setCriteria] = useState<'A' | 'B'>('A')
+  const [testStartDate, setTestStartDate] = useState(new Date().toISOString().slice(0, 10))
+  const [testEndDate, setTestEndDate] = useState(new Date().toISOString().slice(0, 10))
+  const [mltMethod, setMltMethod] = useState('')
+  const [stabilitySpecifications, setStabilitySpecifications] = useState('')
   const [tester, setTester] = useState('')
   const [approver, setApprover] = useState('')
-  const [results, setResults] = useState<CertificateResult[]>([])
+  const [results, setResults] = useState<CertificateResultsRow[]>([])
   const [products, setProducts] = useState<
     { product_code: string; korean_name: string | null }[]
   >([])
@@ -1112,6 +1616,14 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
   const [loadingSpecs, setLoadingSpecs] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const isBasicType = isBasicQcType(qcType)
+  const isPetType = isPetQcType(qcType)
+  const isStabilityType = isStabilityQcType(qcType)
+  const isMltType = isMltQcType(qcType)
+  const standardResults = results as CertificateResult[]
+  const petResults = results as PetCertificateResult[]
+  const stabilityResults = results as StabilityCertificateResult[]
+  const mltResults = results as MltCertificateResult[]
 
   useEffect(() => {
     setLoadingProducts(true)
@@ -1130,6 +1642,25 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
       toast.error('제품을 선택해주세요')
       return
     }
+
+    if (isPetType) {
+      setResults(createPetDefaultRows())
+      setStep(2)
+      return
+    }
+
+    if (isStabilityType) {
+      setResults(createStabilityDefaultRows())
+      setStep(2)
+      return
+    }
+
+    if (isMltType) {
+      setResults(createMltDefaultRows())
+      setStep(2)
+      return
+    }
+
     setLoadingSpecs(true)
     try {
       const { specs, error } = await fetchQcSpecsTemplate(productCode, qcType)
@@ -1161,13 +1692,15 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
     }
   }
 
-  const overallJudgment = results.every((r) => r.judgment === '적합')
-    ? '적합'
-    : '부적합'
+  const overallJudgment = isBasicType
+    ? standardResults.every((r) => r.judgment === '적합')
+      ? '적합'
+      : '부적합'
+    : manualOverallJudgment
 
   const handleResultChange = (
     index: number,
-    field: keyof CertificateResult,
+    field: string,
     value: string
   ) => {
     setResults((prev) =>
@@ -1176,6 +1709,50 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
   }
 
   const addResult = () => {
+    if (isPetType) {
+      setResults((prev) => [
+        ...prev,
+        {
+          organism: '',
+          atcc: '',
+          initial_count: '',
+          log_reduction_d7: '',
+          log_reduction_d14: '',
+          log_reduction_d28: '',
+          conclusion: '',
+        } as PetCertificateResult,
+      ])
+      return
+    }
+
+    if (isStabilityType) {
+      setResults((prev) => [
+        ...prev,
+        {
+          parameter: '',
+          temperature: '',
+          day_0: '',
+          day_14: '',
+          month_1: '',
+          month_2: '',
+          month_3: '',
+        } as StabilityCertificateResult,
+      ])
+      return
+    }
+
+    if (isMltType) {
+      setResults((prev) => [
+        ...prev,
+        {
+          test_item: '',
+          specification: '',
+          result: '',
+        } as MltCertificateResult,
+      ])
+      return
+    }
+
     setResults((prev) => [
       ...prev,
       {
@@ -1194,8 +1771,18 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
   }
 
   const handleSubmit = async () => {
-    if (results.some((r) => !r.result)) {
+    if (isBasicType && standardResults.some((r) => !r.result)) {
       toast.error('모든 시험 결과를 입력해주세요')
+      return
+    }
+
+    if (isPetType && petResults.some((r) => !r.organism.trim())) {
+      toast.error('PET 시험균주명을 입력해주세요')
+      return
+    }
+
+    if (isMltType && mltResults.some((r) => !r.test_item.trim())) {
+      toast.error('MLT 시험항목을 입력해주세요')
       return
     }
 
@@ -1219,6 +1806,14 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
         approver: approver || undefined,
         overall_judgment: overallJudgment,
         results,
+        notes: buildCertificateNotes(qcType, {
+          lab_no: labNo,
+          criteria,
+          test_start_date: testStartDate,
+          test_end_date: testEndDate,
+          method: mltMethod,
+          specifications: stabilitySpecifications,
+        }),
       })
 
       if (error || !certificate) {
@@ -1229,11 +1824,16 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
       toast.success('성적서가 저장되었습니다')
 
       try {
+        if (!isBasicType) {
+          setStep(3)
+          return
+        }
+
         const productName =
           products.find((p) => p.product_code === productCode)?.korean_name ?? ''
         const pdfBlob = await generatePdf({
           certificate: { ...certificate, product_name: productName },
-          results,
+          results: standardResults,
           qcType,
           productName,
         })
@@ -1310,7 +1910,7 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
               </SelectTrigger>
               <SelectContent>
                 {QC_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                  <SelectItem key={t} value={t}>{QC_TYPE_LABEL[t]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1338,6 +1938,191 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
 
   if (step === 2) {
     const productName = products.find((p) => p.product_code === productCode)?.korean_name || ''
+
+    if (!isBasicType) {
+      return (
+        <div className="space-y-4 p-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">{QC_TYPE_LABEL[qcType]} 시험 데이터 입력</h3>
+              <p className="text-xs text-slate-500 mt-1">{productName || productCode} · {certificateNo}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">LOT No.</label>
+                <Input value={lotNo} onChange={(e) => setLotNo(e.target.value)} className="h-8" placeholder="LOT 번호" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">시험일</label>
+                <Input type="date" value={testDate} onChange={(e) => setTestDate(e.target.value)} className="h-8" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">시험자</label>
+                <Input value={tester} onChange={(e) => setTester(e.target.value)} className="h-8" placeholder="시험자" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">승인자</label>
+                <Input value={approver} onChange={(e) => setApprover(e.target.value)} className="h-8" placeholder="승인자" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">종합 판정</label>
+                <Select value={manualOverallJudgment} onValueChange={(v) => { if (v === '적합' || v === '부적합') setManualOverallJudgment(v) }}>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="적합">적합</SelectItem>
+                    <SelectItem value="부적합">부적합</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {isPetType && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Lab No.</label>
+                    <Input value={labNo} onChange={(e) => setLabNo(e.target.value)} className="h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">Criteria</label>
+                    <Select value={criteria} onValueChange={(v) => { if (v === 'A' || v === 'B') setCriteria(v) }}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="A">A</SelectItem>
+                        <SelectItem value="B">B</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {(isPetType || isMltType) && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">시험 시작일</label>
+                    <Input type="date" value={testStartDate} onChange={(e) => setTestStartDate(e.target.value)} className="h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-600">시험 종료일</label>
+                    <Input type="date" value={testEndDate} onChange={(e) => setTestEndDate(e.target.value)} className="h-8" />
+                  </div>
+                </>
+              )}
+
+              {isMltType && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-slate-600">시험 방법(Method)</label>
+                  <Input value={mltMethod} onChange={(e) => setMltMethod(e.target.value)} className="h-8" />
+                </div>
+              )}
+
+              {isStabilityType && (
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-medium text-slate-600">기타 규격 메모</label>
+                  <Input value={stabilitySpecifications} onChange={(e) => setStabilitySpecifications(e.target.value)} className="h-8" />
+                </div>
+              )}
+            </div>
+
+            {isPetType && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험균주</th>
+                    <th className="border px-2 py-2 bg-slate-50">ATCC</th>
+                    <th className="border px-2 py-2 bg-slate-50">초기균수</th>
+                    <th className="border px-2 py-2 bg-slate-50">D7 Log 감소</th>
+                    <th className="border px-2 py-2 bg-slate-50">D14 Log 감소</th>
+                    <th className="border px-2 py-2 bg-slate-50">D28 Log 감소</th>
+                    <th className="border px-2 py-2 bg-slate-50">결론</th>
+                    <th className="border px-2 py-2 bg-slate-50 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {petResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1"><Input value={row.organism} onChange={(e) => handleResultChange(i, 'organism', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.atcc} onChange={(e) => handleResultChange(i, 'atcc', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.initial_count} onChange={(e) => handleResultChange(i, 'initial_count', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.log_reduction_d7} onChange={(e) => handleResultChange(i, 'log_reduction_d7', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.log_reduction_d14} onChange={(e) => handleResultChange(i, 'log_reduction_d14', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.log_reduction_d28} onChange={(e) => handleResultChange(i, 'log_reduction_d28', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.conclusion} onChange={(e) => handleResultChange(i, 'conclusion', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {isStabilityType && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험항목</th>
+                    <th className="border px-2 py-2 bg-slate-50">보관조건</th>
+                    <th className="border px-2 py-2 bg-slate-50">Day 0</th>
+                    <th className="border px-2 py-2 bg-slate-50">Day 14</th>
+                    <th className="border px-2 py-2 bg-slate-50">1개월</th>
+                    <th className="border px-2 py-2 bg-slate-50">2개월</th>
+                    <th className="border px-2 py-2 bg-slate-50">3개월</th>
+                    <th className="border px-2 py-2 bg-slate-50 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stabilityResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1"><Input value={row.parameter} onChange={(e) => handleResultChange(i, 'parameter', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.temperature} onChange={(e) => handleResultChange(i, 'temperature', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.day_0} onChange={(e) => handleResultChange(i, 'day_0', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.day_14} onChange={(e) => handleResultChange(i, 'day_14', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.month_1} onChange={(e) => handleResultChange(i, 'month_1', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.month_2} onChange={(e) => handleResultChange(i, 'month_2', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.month_3} onChange={(e) => handleResultChange(i, 'month_3', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {isMltType && (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border px-2 py-2 bg-slate-50">시험항목</th>
+                    <th className="border px-2 py-2 bg-slate-50">규격</th>
+                    <th className="border px-2 py-2 bg-slate-50">결과</th>
+                    <th className="border px-2 py-2 bg-slate-50 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mltResults.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1"><Input value={row.test_item} onChange={(e) => handleResultChange(i, 'test_item', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.specification} onChange={(e) => handleResultChange(i, 'specification', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1"><Input value={row.result} onChange={(e) => handleResultChange(i, 'result', e.target.value)} className="h-7 text-xs" /></td>
+                      <td className="border p-1 text-center"><Button variant="ghost" size="sm" onClick={() => removeResult(i)} className="h-6 w-6 p-0 text-red-500"><Trash2 size={12} /></Button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <Button variant="outline" size="sm" onClick={addResult} className="gap-1 text-xs w-fit">
+              <Plus size={12} /> 행 추가
+            </Button>
+          </div>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep(1)}>← 이전</Button>
+            <Button onClick={handleSubmit} disabled={submitting || results.length === 0} className="gap-1 bg-amber-500 hover:bg-amber-600">
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              저장
+            </Button>
+          </div>
+        </div>
+      )
+    }
 
     if (qcType === '영문') {
       return (
@@ -1372,7 +2157,7 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((r, i) => (
+                  {standardResults.map((r, i) => (
                     <tr key={i}>
                       <td className="border border-slate-400 px-2 py-1.5">
                         <Input value={r.test_item} onChange={(e) => handleResultChange(i, 'test_item', e.target.value)} className="h-5 text-[10px]" />
@@ -1554,7 +2339,7 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
                 </tr>
               </thead>
               <tbody>
-                {results.map((r, i) => (
+                {standardResults.map((r, i) => (
                   <tr key={i}>
                     <th className="border border-black px-2 py-1.5 bg-gray-100 font-bold text-center">
                       <Input value={r.test_item} onChange={(e) => handleResultChange(i, 'test_item', e.target.value)} className="h-5 text-[10px]" />
@@ -1649,11 +2434,12 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
     <div className="px-6 pb-6 space-y-4">
       <div className="text-center py-4">
         <div className="text-green-600 text-lg font-bold mb-2">
-          ✓ 성적서가 발급되었습니다
+          {isBasicType ? '✓ 성적서가 발급되었습니다' : '✓ 시험 데이터가 저장되었습니다'}
         </div>
-        <p className="text-sm text-slate-500">
-          {certificateNo} · {qcType}
-        </p>
+        <p className="text-sm text-slate-500">{certificateNo} · {QC_TYPE_LABEL[qcType]}</p>
+        {!isBasicType && (
+          <p className="text-xs text-slate-400 mt-1">PDF 발급은 CPNP 문서 생성 단계에서 진행됩니다.</p>
+        )}
       </div>
 
       {previewUrl && (

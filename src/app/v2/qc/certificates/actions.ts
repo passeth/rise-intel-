@@ -25,7 +25,7 @@ export interface TestCertificate {
   tester: string | null
   approver: string | null
   overall_judgment: string
-  results: CertificateResult[]
+  results: CertificateResultsRow[]
   pdf_url: string | null
   notes: string | null
   created_at: string
@@ -41,6 +41,38 @@ export interface CertificateResult {
   test_date?: string
   tester?: string
 }
+
+export interface PetCertificateResult {
+  organism: string
+  atcc: string
+  initial_count: string
+  log_reduction_d7: string
+  log_reduction_d14: string
+  log_reduction_d28: string
+  conclusion: string
+}
+
+export interface StabilityCertificateResult {
+  parameter: string
+  temperature: string
+  day_0: string
+  day_14: string
+  month_1: string
+  month_2: string
+  month_3: string
+}
+
+export interface MltCertificateResult {
+  test_item: string
+  specification: string
+  result: string
+}
+
+export type CertificateResultsRow =
+  | CertificateResult
+  | PetCertificateResult
+  | StabilityCertificateResult
+  | MltCertificateResult
 
 export type SortField =
   | 'certificate_no'
@@ -142,7 +174,7 @@ export async function fetchCertificates(
     return {
       certificates: (fallbackData ?? []).map((c: any) => ({
         ...c,
-        results: (c.results ?? []) as CertificateResult[],
+        results: (c.results ?? []) as CertificateResultsRow[],
         product_name: null,
       })) as TestCertificate[],
       totalCount,
@@ -153,7 +185,7 @@ export async function fetchCertificates(
   const certificates = (data ?? []).map((c: any) => {
     return {
       ...c,
-      results: (c.results ?? []) as CertificateResult[],
+      results: (c.results ?? []) as CertificateResultsRow[],
       product_name: c.labdoc_products?.korean_name ?? null,
       labdoc_products: undefined,
     }
@@ -237,7 +269,7 @@ export async function createCertificate(data: {
   tester?: string
   approver?: string
   overall_judgment: string
-  results: CertificateResult[]
+  results: CertificateResultsRow[]
   notes?: string
 }): Promise<{ certificate: TestCertificate | null; error?: string }> {
   const supabase = await createClient()
@@ -274,7 +306,7 @@ export async function createCertificate(data: {
   return {
     certificate: {
       ...inserted,
-      results: (inserted.results ?? []) as CertificateResult[],
+      results: (inserted.results ?? []) as CertificateResultsRow[],
     } as unknown as TestCertificate,
   }
 }
@@ -295,7 +327,7 @@ export async function updateCertificate(
     tester?: string
     approver?: string
     overall_judgment?: string
-    results?: CertificateResult[]
+    results?: CertificateResultsRow[]
     notes?: string
   }
 ): Promise<{ success: boolean; error?: string }> {

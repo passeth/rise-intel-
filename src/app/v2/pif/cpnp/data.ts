@@ -40,6 +40,28 @@ function asUnknownArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
 
+function parseNotesRecord(notes: unknown): Record<string, unknown> | null {
+  const noteText = asString(notes)
+  if (!noteText) {
+    return null
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(noteText)
+    return asRecord(parsed)
+  } catch {
+    return null
+  }
+}
+
+function readFromRawOrNotes(
+  raw: Record<string, unknown>,
+  notes: Record<string, unknown> | null,
+  key: string
+): string | null {
+  return asString(raw[key]) ?? asString(notes?.[key])
+}
+
 async function fetchLatestTestCertificate(
   supabase: SupabaseClient,
   productCode: string,
@@ -129,12 +151,14 @@ function parsePetCertificate(raw: Record<string, unknown> | null): CpnpPetCertif
     return null
   }
 
+  const notes = parseNotesRecord(raw.notes)
+
   return {
     ...parseCertificateBase(raw),
-    lab_no: asString(raw.lab_no),
-    test_start_date: asString(raw.test_start_date),
-    test_end_date: asString(raw.test_end_date),
-    criteria: asString(raw.criteria),
+    lab_no: readFromRawOrNotes(raw, notes, 'lab_no'),
+    test_start_date: readFromRawOrNotes(raw, notes, 'test_start_date'),
+    test_end_date: readFromRawOrNotes(raw, notes, 'test_end_date'),
+    criteria: readFromRawOrNotes(raw, notes, 'criteria'),
     results: parsePetResults(raw.results),
   }
 }
@@ -146,10 +170,12 @@ function parseStabilityCertificate(
     return null
   }
 
+  const notes = parseNotesRecord(raw.notes)
+
   return {
     ...parseCertificateBase(raw),
     manufacturing_date: asString(raw.manufacture_date),
-    specifications: asString(raw.specifications),
+    specifications: readFromRawOrNotes(raw, notes, 'specifications'),
     results: parseStabilityResults(raw.results),
   }
 }
@@ -159,11 +185,13 @@ function parseMltCertificate(raw: Record<string, unknown> | null): CpnpMltCertif
     return null
   }
 
+  const notes = parseNotesRecord(raw.notes)
+
   return {
     ...parseCertificateBase(raw),
-    test_start_date: asString(raw.test_start_date),
-    test_end_date: asString(raw.test_end_date),
-    method: asString(raw.method),
+    test_start_date: readFromRawOrNotes(raw, notes, 'test_start_date'),
+    test_end_date: readFromRawOrNotes(raw, notes, 'test_end_date'),
+    method: readFromRawOrNotes(raw, notes, 'method'),
     results: parseMltResults(raw.results),
   }
 }
