@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -12,9 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ChevronLeft, Loader2, Search, Check, X, FlaskConical, FileText, ClipboardPaste, Package, Beaker, History, ChevronDown, ChevronUp, Trash2, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MarkdownRenderer } from '@/components/ui/markdown-renderer'
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
 
 import {
   searchLabProducts,
@@ -29,6 +27,41 @@ import {
   type VpFormulaOption,
   type FormulaAnalysisRecord,
 } from './actions'
+
+const MarkdownRenderer = dynamic(
+  () => import('@/components/ui/markdown-renderer').then((mod) => mod.MarkdownRenderer),
+  {
+    ssr: false,
+    loading: () => <div className="text-sm text-gray-400">리포트 렌더링 중...</div>,
+  }
+)
+
+function formatHistoryDate(value: string) {
+  try {
+    const parts = new Intl.DateTimeFormat('ko-KR', {
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(value))
+
+    const month = parts.find((part) => part.type === 'month')?.value
+    const day = parts.find((part) => part.type === 'day')?.value
+    const weekday = parts.find((part) => part.type === 'weekday')?.value
+    const hour = parts.find((part) => part.type === 'hour')?.value
+    const minute = parts.find((part) => part.type === 'minute')?.value
+
+    if (!month || !day || !weekday || !hour || !minute) {
+      return value
+    }
+
+    return `${month}/${day} (${weekday}) ${hour}:${minute}`
+  } catch {
+    return value
+  }
+}
 
 type InputMode = 'paste' | 'product' | 'formula'
 
@@ -493,13 +526,7 @@ function HistoryCard({
   onDelete: () => void
 }) {
   const ingredientCount = record.related_ingredients?.length ?? 0
-  const createdDate = (() => {
-    try {
-      return format(new Date(record.created_at), 'M/d (EEE) HH:mm', { locale: ko })
-    } catch {
-      return record.created_at
-    }
-  })()
+  const createdDate = formatHistoryDate(record.created_at)
 
   return (
     <Card className="border-[#E5E5E5] shadow-sm bg-white overflow-hidden">

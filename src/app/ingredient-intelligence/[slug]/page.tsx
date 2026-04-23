@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -12,7 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, Loader2, Star, Shield, ShieldAlert, ShieldX, Database, Brain, FlaskConical, ExternalLink, FileText, Trash2, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MarkdownRenderer } from '@/components/ui/markdown-renderer'
 import { REPORT_TYPES, getReportTypeConfig, type ResearchReport } from '../_lib/report-types'
 
 import {
@@ -27,6 +27,14 @@ import {
   deleteReport,
   searchIngredients,
 } from './actions'
+
+const MarkdownRenderer = dynamic(
+  () => import('@/components/ui/markdown-renderer').then((mod) => mod.MarkdownRenderer),
+  {
+    ssr: false,
+    loading: () => <div className="text-sm text-gray-400">리포트 렌더링 중...</div>,
+  }
+)
 
 /**
  * Clean scraped INCIDecoder details text.
