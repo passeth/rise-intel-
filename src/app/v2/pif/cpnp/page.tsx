@@ -6,6 +6,13 @@ import { fetchPifProducts, type PifProduct } from '@/app/v2/pif/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -20,6 +27,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
   ExternalLink,
   FileText,
   History,
@@ -30,7 +38,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CPNP_DOCUMENT_TYPES } from './constants'
-import { fetchCpnpGenerationHistory } from './data'
+import { CpnpDocumentHtmlPreview } from './document-preview'
+import { fetchCpnpGenerationHistory, fetchCpnpProductData } from './data'
 import type {
   CpnpDocumentResult,
   CpnpDocumentType,
@@ -40,6 +49,14 @@ import type {
 } from './types'
 
 const PAGE_SIZE = 20
+
+type PreviewDocument = {
+  url: string
+  title: string
+  type: CpnpDocumentType
+  productCode?: string
+  productName?: string
+}
 
 function renderDash(value: string | null): string {
   if (!value || value.trim().length === 0) {
@@ -114,10 +131,17 @@ export default function V2PifCpnpPage() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [previewDocument, setPreviewDocument] = useState<PreviewDocument | null>(null)
 
   const historyQuery = useQuery({
     queryKey: ['cpnp-history'],
     queryFn: () => fetchCpnpGenerationHistory(1, 20),
+  })
+
+  const previewDataQuery = useQuery({
+    queryKey: ['cpnp-preview-data', previewDocument?.productCode],
+    queryFn: () => fetchCpnpProductData(previewDocument?.productCode ?? ''),
+    enabled: Boolean(previewDocument?.productCode),
   })
 
   const { data, isLoading } = useQuery({
@@ -263,9 +287,17 @@ export default function V2PifCpnpPage() {
     }
   }
 
-  const renderDocumentResult = (documentResult: CpnpDocumentResult) => {
+  const handlePreviewDocument = (document: PreviewDocument) => {
+    setPreviewDocument(document)
+  }
+
+  const renderDocumentResult = (
+    documentResult: CpnpDocumentResult,
+    productResult: CpnpProductResult
+  ) => {
     const documentTypeInfo = documentTypeInfoMap.get(documentResult.type)
     const Icon = documentTypeInfo?.icon ?? FileText
+    const documentTitle = documentTypeInfo?.label ?? documentResult.type
 
     return (
       <div
@@ -274,18 +306,39 @@ export default function V2PifCpnpPage() {
       >
         <Icon size={14} className="text-[#666666]" />
         <span className="text-xs font-medium text-[#1A1A1A]">
-          {documentTypeInfo?.label ?? documentResult.type}
+          {documentTitle}
         </span>
 
         {documentResult.url ? (
-          <a
-            href={documentResult.url}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
-          >
-            PDF 열기 <ExternalLink size={12} />
-          </a>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                handlePreviewDocument({
+                  url: documentResult.url!,
+                  title: documentTitle,
+                  type: documentResult.type,
+                  productCode: productResult.productCode,
+                  productName: productResult.productName,
+                })
+              }
+              className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <Eye size={12} className="mr-1" />
+              미리보기
+            </Button>
+            <a
+              href={documentResult.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-[#666666] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+              aria-label={`${documentTitle} 새 탭에서 열기`}
+            >
+              <ExternalLink size={12} />
+            </a>
+          </div>
         ) : documentResult.error ? (
           <span className="ml-auto text-xs font-medium text-red-600">{documentResult.error}</span>
         ) : (
@@ -317,7 +370,9 @@ export default function V2PifCpnpPage() {
         </summary>
 
         <div className="space-y-2 border-t border-[#E5E5E5] px-4 py-3">
-          {productResult.documents.map(renderDocumentResult)}
+          {productResult.documents.map((documentResult) =>
+            renderDocumentResult(documentResult, productResult)
+          )}
         </div>
       </details>
     )
@@ -744,14 +799,34 @@ export default function V2PifCpnpPage() {
                       <TableCell className="text-xs">{renderHistoryStatus(historyItem.status)}</TableCell>
                       <TableCell className="text-xs">
                         {historyItem.pdf_url ? (
-                          <a
-                            href={historyItem.pdf_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:underline"
-                          >
-                            열기 <ExternalLink size={12} />
-                          </a>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                handlePreviewDocument({
+                                  url: historyItem.pdf_url!,
+                                  title: documentTypeInfo?.label ?? historyItem.document_type,
+                                  type: historyItem.document_type as CpnpDocumentType,
+                                  productCode: historyItem.product_code,
+                                })
+                              }
+                              className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                            >
+                              <Eye size={12} className="mr-1" />
+                              보기
+                            </Button>
+                            <a
+                              href={historyItem.pdf_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-7 items-center rounded-md px-2 text-[#666666] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+                              aria-label={`${documentTypeInfo?.label ?? historyItem.document_type} 새 탭에서 열기`}
+                            >
+                              <ExternalLink size={12} />
+                            </a>
+                          </div>
                         ) : (
                           <span className="text-[#999999]">-</span>
                         )}
@@ -776,6 +851,64 @@ export default function V2PifCpnpPage() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={previewDocument !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewDocument(null)
+          }
+        }}
+      >
+        <DialogContent className="flex h-[min(860px,calc(100vh-2rem))] w-[min(1220px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden rounded-md border-[#DADADA] p-0">
+          <DialogHeader className="border-b border-[#E5E5E5] bg-white px-5 py-3 pr-12">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Badge className="h-5 bg-[#1A1A1A] px-2 text-[10px] text-white hover:bg-[#1A1A1A]">
+                HTML
+              </Badge>
+              <DialogTitle className="truncate text-sm font-semibold text-[#1A1A1A]">
+                {previewDocument?.title ?? '문서 미리보기'}
+              </DialogTitle>
+              {previewDocument?.productCode && (
+                <span className="font-mono text-xs text-[#666666]">
+                  {previewDocument.productCode}
+                </span>
+              )}
+              {previewDocument?.url && (
+                <a
+                  href={previewDocument.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-[#DADADA] px-2 text-xs font-medium text-[#666666] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+                >
+                  새 탭 <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+            <DialogDescription className="sr-only">
+              생성된 문서 내용을 HTML 미리보기로 확인합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto bg-[#4A4A4A] p-6">
+            {previewDataQuery.isLoading ? (
+              <div className="flex h-full items-center justify-center text-sm text-white">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                문서 데이터를 불러오는 중...
+              </div>
+            ) : previewDataQuery.isError ? (
+              <div className="flex h-full items-center justify-center text-sm text-white">
+                문서 데이터를 불러오지 못했습니다.
+              </div>
+            ) : previewDocument && previewDataQuery.data ? (
+              <CpnpDocumentHtmlPreview type={previewDocument.type} data={previewDataQuery.data} />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-white">
+                미리볼 문서가 없습니다
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
