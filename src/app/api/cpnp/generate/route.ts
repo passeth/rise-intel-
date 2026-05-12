@@ -45,6 +45,40 @@ function isAutoGeneratableType(type: CpnpDocumentType): type is AutoGeneratableD
   return AUTO_GENERATABLE_TYPE_SET.has(type)
 }
 
+function formatKoreaDateForFileName(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? '00'
+  const month = parts.find((part) => part.type === 'month')?.value ?? '00'
+  const day = parts.find((part) => part.type === 'day')?.value ?? '00'
+
+  return `${year}${month}${day}`
+}
+
+function sanitizePdfFileNamePart(value: string): string {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|#%{}^~[\]`]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/g, '')
+    .trim()
+}
+
+function buildCpnpPdfFileName(data: CpnpProductData, date: Date): string {
+  const productCode = sanitizePdfFileNamePart(data.product.product_code || 'product')
+  const productEnglishName = sanitizePdfFileNamePart(
+    data.product.english_name || data.product.korean_name || data.product.product_code || 'product'
+  )
+  const yymmdd = formatKoreaDateForFileName(date)
+
+  return `${productCode}_${productEnglishName}_${yymmdd}.pdf`
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
@@ -165,12 +199,13 @@ export async function POST(request: NextRequest) {
           const generator = generators[type]
 
           try {
-            const timestamp = new Date().toISOString().replace(/:/g, '-')
-            const filePath = `cpnp/${productCode}/${type}/${timestamp}.pdf`
+            const generatedAtDate = new Date()
+            const fileName = buildCpnpPdfFileName(data, generatedAtDate)
+            const filePath = `cpnp/${productCode}/${type}/${fileName}`
             const pdfBlob = await generator(data)
             const url = await uploadFile(pdfBlob, filePath)
 
-            const generatedAt = new Date().toISOString()
+            const generatedAt = generatedAtDate.toISOString()
             const insertIntoUnknownTable = (table: string) =>
               supabase.from(table as never) as unknown as {
                 insert: (

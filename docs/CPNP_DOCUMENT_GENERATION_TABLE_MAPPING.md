@@ -19,8 +19,11 @@
 저장 경로:
 
 ```text
-documents/cpnp/{productCode}/{documentType}/{timestamp}.pdf
+documents/cpnp/{productCode}/{documentType}/{productCode}_{productEnglishName}_{yymmdd}.pdf
 ```
+
+파일명은 품목코드, 품목영문명, 한국 시간 기준 생성일 `yymmdd`를 조합한다.
+예: `ABC001_Product Name_260512.pdf`
 
 생성 이력 테이블:
 
