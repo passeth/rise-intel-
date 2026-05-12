@@ -29,6 +29,7 @@ export interface ProductDetailProduct {
   dosage: string | null
   usage_precautions: string | null
   remarks: string | null
+  pif_status?: string | null
 }
 
 export interface ProductDetailImage {
@@ -92,6 +93,8 @@ export interface IngredientComponentRow {
   cas_number: string | null
   composition_ratio: number | null
   function: string | null
+  default_function?: string | null
+  function_source?: 'master' | 'product'
   component_order: number | null
   country_of_origin: string | null
   created_at: string | null
@@ -103,6 +106,8 @@ export interface NormalizedBomItem {
   totalUsemount: number
   components: IngredientComponentRow[]
   coaUrls: string[]
+  productFunction: string | null
+  defaultFunction: string | null
 }
 
 export interface ProductInci {
@@ -141,6 +146,7 @@ type SupabaseClient = Awaited<ReturnType<typeof createClient>>
 
 async function fetchBomWithComponents(
   supabase: SupabaseClient,
+  productCode: string,
   semiProductCode: string | null
 ): Promise<NormalizedBomItem[]> {
   if (!semiProductCode) {
@@ -188,7 +194,7 @@ async function fetchBomWithComponents(
     return []
   }
 
-  const [componentsResult, ingredientsResult] = await Promise.all([
+  const [componentsResult, ingredientsResult, ingredientFunctionsResult, componentFunctionsResult] = await Promise.all([
     supabase
       .from('labdoc_ingredient_components')
       .select('*')
@@ -198,12 +204,44 @@ async function fetchBomWithComponents(
       .from('labdoc_ingredients')
       .select('ingredient_code, coa_urls')
       .in('ingredient_code', baseCodes),
+    supabase
+      .from('labdoc_product_ingredient_functions')
+      .select('ingredient_code, function')
+      .eq('product_code', productCode)
+      .in('ingredient_code', baseCodes),
+    supabase
+      .from('labdoc_product_component_functions')
+      .select('component_id, function')
+      .eq('product_code', productCode),
   ])
+
+  const productFunctionMap = new Map<string, string | null>()
+  if (!ingredientFunctionsResult.error) {
+    for (const row of ingredientFunctionsResult.data ?? []) {
+      productFunctionMap.set(row.ingredient_code, row.function)
+    }
+  }
+
+  const componentFunctionMap = new Map<string, string | null>()
+  if (!componentFunctionsResult.error) {
+    for (const row of componentFunctionsResult.data ?? []) {
+      componentFunctionMap.set(row.component_id, row.function)
+    }
+  }
 
   const componentsMap = new Map<string, IngredientComponentRow[]>()
   for (const component of componentsResult.data ?? []) {
+    const defaultFunction = component.function
+    const productFunction = componentFunctionMap.get(component.id)
+    const effectiveFunction =
+      productFunction !== undefined ? productFunction : defaultFunction
     const existing = componentsMap.get(component.ingredient_code) ?? []
-    existing.push(component as IngredientComponentRow)
+    existing.push({
+      ...(component as IngredientComponentRow),
+      function: effectiveFunction,
+      default_function: defaultFunction,
+      function_source: productFunction !== undefined ? 'product' : 'master',
+    })
     componentsMap.set(component.ingredient_code, existing)
   }
 
@@ -218,13 +256,21 @@ async function fetchBomWithComponents(
   }
 
   return Array.from(normalizedMap.entries())
-    .map(([baseCode, value]) => ({
-      baseCode,
-      materialname: value.materialname,
-      totalUsemount: value.totalUsemount,
-      components: componentsMap.get(baseCode) ?? [],
-      coaUrls: coaMap.get(baseCode) ?? [],
-    }))
+    .map(([baseCode, value]) => {
+      const components = componentsMap.get(baseCode) ?? []
+      const defaultFunction =
+        Array.from(new Set(components.map((component) => component.default_function).filter(Boolean)))
+          .join(', ') || null
+      return {
+        baseCode,
+        materialname: value.materialname,
+        totalUsemount: value.totalUsemount,
+        components,
+        coaUrls: coaMap.get(baseCode) ?? [],
+        productFunction: productFunctionMap.get(baseCode) ?? defaultFunction,
+        defaultFunction,
+      }
+    })
     .sort((a, b) => b.totalUsemount - a.totalUsemount)
 }
 
@@ -312,7 +358,7 @@ export async function fetchProductDetail(
           steps: (steps ?? []) as ProductManufacturingStep[],
         }
       })(),
-      fetchBomWithComponents(supabase, product.semi_product_code),
+      fetchBomWithComponents(supabase, productCode, product.semi_product_code),
       supabase
         .from('labdoc_product_inci')
         .select('*')
@@ -329,4 +375,132 @@ export async function fetchProductDetail(
     bom,
     inci: (inciResult.data as ProductInci | null) ?? null,
   }
+}
+
+const STANDARD_EDITABLE_FIELDS = new Set([
+  'product_code',
+  'management_code',
+  'korean_name',
+  'english_name',
+  'cosmetic_type',
+  'appearance',
+  'usage_instructions',
+  'functional_claim',
+  'storage_method',
+  'label_volume',
+  'fill_volume',
+  'shelf_life',
+  'ph_standard',
+  'viscosity_standard',
+  'specific_gravity',
+  'packaging_unit',
+  'dosage',
+  'usage_precautions',
+  'remarks',
+])
+
+export async function updateProductStandard(input: {
+  productCode: string
+  values: Record<string, string | number | null>
+}): Promise<{ success: boolean; productCode: string; error?: string }> {
+  const supabase = await createClient()
+  const nextProductCodeValue = input.values.product_code
+  const nextProductCode =
+    typeof nextProductCodeValue === 'string' && nextProductCodeValue.trim().length > 0
+      ? nextProductCodeValue.trim()
+      : input.productCode
+
+  const updatePayload: Record<string, string | number | null> = {}
+  for (const [field, value] of Object.entries(input.values)) {
+    if (STANDARD_EDITABLE_FIELDS.has(field)) {
+      updatePayload[field] = value
+    }
+  }
+  updatePayload.updated_at = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('labdoc_products')
+    .update(updatePayload)
+    .eq('product_code', input.productCode)
+
+  if (error) {
+    console.error('updateProductStandard error:', error)
+    return { success: false, productCode: input.productCode, error: error.message }
+  }
+
+  if (nextProductCode !== input.productCode) {
+    const relatedTables = [
+      'labdoc_product_revisions',
+      'labdoc_product_qc_specs',
+      'labdoc_product_inci',
+      'labdoc_manufacturing_processes',
+      'labdoc_product_subsidiary_materials',
+      'labdoc_test_certificates',
+      'labdoc_product_msds_properties',
+      'labdoc_product_ingredient_functions',
+      'labdoc_product_component_functions',
+    ] as const
+
+    for (const table of relatedTables) {
+      const result = await supabase
+        .from(table)
+        .update({ product_code: nextProductCode })
+        .eq('product_code', input.productCode)
+      if (result.error && !result.error.message.includes('Could not find the table')) {
+        console.warn(`Failed to propagate product_code to ${table}:`, result.error.message)
+      }
+    }
+
+    await supabase
+      .from('rise_products')
+      .update({ code: nextProductCode })
+      .eq('code', input.productCode)
+  }
+
+  return { success: true, productCode: nextProductCode }
+}
+
+export async function updateProductFunction(input: {
+  productCode: string
+  ingredientCode: string
+  componentId?: string
+  functionValue: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const now = new Date().toISOString()
+  const functionValue = input.functionValue?.trim() || null
+
+  if (input.componentId) {
+    const { error } = await supabase
+      .from('labdoc_product_component_functions')
+      .upsert({
+        product_code: input.productCode,
+        ingredient_code: input.ingredientCode,
+        component_id: input.componentId,
+        function: functionValue,
+        updated_at: now,
+      }, { onConflict: 'product_code,component_id' })
+
+    if (error) {
+      console.error('updateProductFunction component error:', error)
+      return { success: false, error: error.message }
+    }
+    return { success: true }
+  }
+
+  const { error } = await supabase
+    .from('labdoc_product_ingredient_functions')
+    .upsert({
+      product_code: input.productCode,
+      ingredient_code: input.ingredientCode,
+      function: functionValue,
+      updated_at: now,
+    }, { onConflict: 'product_code,ingredient_code' })
+
+  if (error) {
+    console.error('updateProductFunction ingredient error:', error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
 }

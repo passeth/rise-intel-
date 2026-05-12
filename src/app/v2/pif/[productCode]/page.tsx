@@ -4,11 +4,14 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState, type ComponentType } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
+import { Textarea } from '@/components/ui/textarea'
+import { toast } from 'sonner'
 
 import {
   AlertCircle,
@@ -25,13 +28,17 @@ import {
   ListChecks,
   Loader2,
   Package2,
+  Save,
   Scale,
   Search,
 } from 'lucide-react'
 import {
   fetchProductDetail,
+  updateProductFunction,
+  updateProductStandard,
   type NormalizedBomItem,
   type ProductDetailData,
+  type ProductDetailProduct,
   type ProductQcSpec,
 } from './actions'
 import { fetchPifProducts, type PifProduct } from '../actions'
@@ -165,6 +172,7 @@ function renderDash(value: string | number | null | undefined): string {
 export default function V2PifDetailPage() {
   const params = useParams<{ productCode: string }>()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const decodedProductCode = decodeURIComponent(params.productCode)
   const [selectedDoc, setSelectedDoc] = useState<string>('standard')
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set())
@@ -204,10 +212,60 @@ export default function V2PifDetailPage() {
     queryFn: () => fetchProductDetail(decodedProductCode),
   })
 
+  const standardMutation = useMutation({
+    mutationFn: updateProductStandard,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error || '제품표준서 저장에 실패했습니다')
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['pif-product-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['pif-products'] })
+      toast.success('제품표준서를 저장했습니다')
+      if (result.productCode !== decodedProductCode) {
+        router.replace(`/v2/pif/${encodeURIComponent(result.productCode)}`)
+      }
+    },
+    onError: (error: Error) => toast.error(error.message || '제품표준서 저장에 실패했습니다'),
+  })
+
+  const functionMutation = useMutation({
+    mutationFn: updateProductFunction,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error || 'Function 저장에 실패했습니다')
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['pif-product-detail', decodedProductCode] })
+      toast.success('Function을 저장했습니다')
+    },
+    onError: (error: Error) => toast.error(error.message || 'Function 저장에 실패했습니다'),
+  })
+
   const printMutation = useMutation({
     mutationFn: async () => {
       window.print()
     },
+  })
+
+  const pdfMutation = useMutation({
+    mutationFn: async () => {
+      if (!data?.product) return
+      await downloadDocumentPdf({
+        activeDoc,
+        productDetail: data,
+        koreanIngredients,
+        englishIngredients,
+        fragranceAllergens,
+        inciMerged,
+        englishSpecs,
+        semiSpecs,
+        finalSpecs,
+        processRecord,
+        processSteps,
+      })
+    },
+    onError: (error: Error) => toast.error(error.message || 'PDF 발급에 실패했습니다'),
   })
 
   const product = data?.product ?? null
@@ -258,7 +316,7 @@ export default function V2PifDetailPage() {
           ingredientName: ingredientName || item.materialname,
           wtPercent: toWeightPercent(item.totalUsemount),
           casNo: casNo || first?.cas_number || '-',
-          functionName: functionName || first?.function || '-',
+          functionName: item.productFunction || functionName || first?.function || '-',
         }
       })
       .sort((a, b) => b.wtPercent - a.wtPercent)
@@ -354,6 +412,15 @@ export default function V2PifDetailPage() {
         const existing = merged.get(key)
         if (existing) {
           existing.wtPercent += ingredientWt
+          const nextFunctions = Array.from(
+            new Set(
+              [existing.functionName, component.function]
+                .flatMap((value) => (value || '').split(','))
+                .map((value) => value.trim())
+                .filter((value) => value.length > 0 && value !== '-')
+            )
+          )
+          existing.functionName = nextFunctions.join(', ') || '-'
           continue
         }
 
@@ -579,10 +646,28 @@ export default function V2PifDetailPage() {
         <main className="min-w-0 flex-1 overflow-y-auto">
           <div className="p-6">
             <div className="mb-4 pb-3 border-b border-[#E5E5E5]">
-              <h1 className="text-lg font-semibold text-[#1A1A1A]">{docLabel(activeDoc)}</h1>
-              <p className="mt-1 text-xs text-[#666666]">
-                {product.korean_name || product.product_code} / {product.product_code}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-lg font-semibold text-[#1A1A1A]">{docLabel(activeDoc)}</h1>
+                  <p className="mt-1 text-xs text-[#666666]">
+                    {product.korean_name || product.product_code} / {product.product_code}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => pdfMutation.mutate()}
+                  disabled={pdfMutation.isPending}
+                  className="h-8 text-xs"
+                >
+                  {pdfMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  현재 탭 PDF 발급
+                </Button>
+              </div>
             </div>
             <DocumentContent
               activeDoc={activeDoc}
@@ -597,6 +682,14 @@ export default function V2PifDetailPage() {
               physicalProps={physicalProps}
               processRecord={processRecord}
               processSteps={processSteps}
+              onSaveStandard={(values) =>
+                standardMutation.mutate({ productCode: decodedProductCode, values })
+              }
+              isSavingStandard={standardMutation.isPending}
+              onSaveFunction={(input) =>
+                functionMutation.mutate({ productCode: decodedProductCode, ...input })
+              }
+              isSavingFunction={functionMutation.isPending}
             />
           </div>
         </main>
@@ -674,6 +767,10 @@ function DocumentContent({
   physicalProps,
   processRecord,
   processSteps,
+  onSaveStandard,
+  isSavingStandard,
+  onSaveFunction,
+  isSavingFunction,
 }: {
   activeDoc: DocId
   productDetail: ProductDetailData | undefined
@@ -693,6 +790,14 @@ function DocumentContent({
   }
   processRecord: ProductDetailData['process']['process']
   processSteps: ProductDetailData['process']['steps']
+  onSaveStandard: (values: Record<string, string | number | null>) => void
+  isSavingStandard: boolean
+  onSaveFunction: (input: {
+    ingredientCode: string
+    componentId?: string
+    functionValue: string | null
+  }) => void
+  isSavingFunction: boolean
 }) {
   const product = productDetail?.product
   if (!product) {
@@ -861,35 +966,43 @@ function DocumentContent({
 
   if (activeDoc === 'inci-merged') {
     return (
-      <div className="overflow-x-auto border border-[#E5E5E5] bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-[#F9F9F9] text-[#666666]">
-            <tr className="border-b border-[#E5E5E5]">
-              <th className="px-3 py-2 w-12 text-center font-medium">No</th>
-              <th className="px-3 py-2 text-left font-medium">INCI Name</th>
-              <th className="px-3 py-2 text-left font-medium">CAS No</th>
-              <th className="px-3 py-2 text-left font-medium">Function</th>
-              <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inciMerged.length === 0 ? (
-              <EmptyRow message="INCI 데이터가 없습니다." colSpan={5} />
-            ) : (
-              inciMerged.map((row, index) => (
-                <tr key={`${row.inciName}-${index}`} className="border-b border-[#E5E5E5] last:border-b-0">
-                  <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
-                  <td className="px-3 py-2 text-[#1A1A1A]">{row.inciName}</td>
-                  <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
-                  <td className="px-3 py-2 text-[#666666]">{row.functionName}</td>
-                  <td className="px-3 py-2 text-right font-mono text-[#1A1A1A]">
-                    {row.wtPercent.toFixed(5)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        <div className="overflow-x-auto border border-[#E5E5E5] bg-white">
+          <table className="w-full text-xs">
+            <thead className="bg-[#F9F9F9] text-[#666666]">
+              <tr className="border-b border-[#E5E5E5]">
+                <th className="px-3 py-2 w-12 text-center font-medium">No</th>
+                <th className="px-3 py-2 text-left font-medium">INCI Name</th>
+                <th className="px-3 py-2 text-left font-medium">CAS No</th>
+                <th className="px-3 py-2 text-left font-medium">Function</th>
+                <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inciMerged.length === 0 ? (
+                <EmptyRow message="INCI 데이터가 없습니다." colSpan={5} />
+              ) : (
+                inciMerged.map((row, index) => (
+                  <tr key={`${row.inciName}-${index}`} className="border-b border-[#E5E5E5] last:border-b-0">
+                    <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
+                    <td className="px-3 py-2 text-[#1A1A1A]">{row.inciName}</td>
+                    <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
+                    <td className="px-3 py-2 text-[#666666]">{row.functionName}</td>
+                    <td className="px-3 py-2 text-right font-mono text-[#1A1A1A]">
+                      {row.wtPercent.toFixed(5)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <ProductFunctionEditor
+          key={product.product_code}
+          bom={productDetail?.bom ?? []}
+          onSave={onSaveFunction}
+          isSaving={isSavingFunction}
+        />
       </div>
     )
   }
@@ -1039,7 +1152,104 @@ function DocumentContent({
   }
 
   return (
+    <StandardDocument
+      key={product.product_code}
+      productDetail={productDetail}
+      onSave={onSaveStandard}
+      isSaving={isSavingStandard}
+    />
+  )
+}
+
+function StandardDocument({
+  productDetail,
+  onSave,
+  isSaving,
+}: {
+  productDetail: ProductDetailData | undefined
+  onSave: (values: Record<string, string | number | null>) => void
+  isSaving: boolean
+}) {
+  const product = productDetail?.product
+  const [form, setForm] = useState<Record<string, string>>(() =>
+    product ? productToStandardForm(product) : {}
+  )
+
+  if (!product) return null
+
+  const updateField = (field: string, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const normalizeText = (value: string): string | null => {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+
+  const handleSave = () => {
+    const specificGravity = normalizeText(form.specific_gravity || '')
+    const specificGravityNumber = specificGravity ? Number(specificGravity) : null
+    onSave({
+      ...Object.fromEntries(
+        Object.entries(form)
+          .filter(([field]) => field !== 'specific_gravity')
+          .map(([field, value]) => [field, normalizeText(value)])
+      ),
+      product_code: normalizeText(form.product_code || '') || product.product_code,
+      specific_gravity:
+        specificGravityNumber !== null && Number.isFinite(specificGravityNumber)
+          ? specificGravityNumber
+          : null,
+    })
+  }
+
+  return (
     <div className="space-y-4">
+      <section className="border border-[#E5E5E5] bg-white p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-[#1A1A1A]">제품표준서 항목 수정</div>
+            <p className="mt-1 text-[11px] text-[#999999]">
+              제품코드 변경 시 연결된 PIF 문서 테이블의 제품코드도 함께 갱신합니다.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="h-8 bg-[#1A1A1A] text-xs text-white hover:bg-[#333333]"
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5 mr-1" />
+            )}
+            저장
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <StandardInput label="제품코드" value={form.product_code} onChange={(v) => updateField('product_code', v)} />
+          <StandardInput label="관리번호" value={form.management_code} onChange={(v) => updateField('management_code', v)} />
+          <StandardInput label="제품명" value={form.korean_name} onChange={(v) => updateField('korean_name', v)} />
+          <StandardInput label="영문명" value={form.english_name} onChange={(v) => updateField('english_name', v)} />
+          <StandardInput label="유형" value={form.cosmetic_type} onChange={(v) => updateField('cosmetic_type', v)} />
+          <StandardInput label="성상" value={form.appearance} onChange={(v) => updateField('appearance', v)} />
+          <StandardInput label="표시용량" value={form.label_volume} onChange={(v) => updateField('label_volume', v)} />
+          <StandardInput label="충진용량" value={form.fill_volume} onChange={(v) => updateField('fill_volume', v)} />
+          <StandardInput label="사용기한" value={form.shelf_life} onChange={(v) => updateField('shelf_life', v)} />
+          <StandardInput label="pH" value={form.ph_standard} onChange={(v) => updateField('ph_standard', v)} />
+          <StandardInput label="점도" value={form.viscosity_standard} onChange={(v) => updateField('viscosity_standard', v)} />
+          <StandardInput label="비중" value={form.specific_gravity} onChange={(v) => updateField('specific_gravity', v)} />
+          <StandardInput label="포장단위" value={form.packaging_unit} onChange={(v) => updateField('packaging_unit', v)} />
+          <StandardInput label="용량/용법" value={form.dosage} onChange={(v) => updateField('dosage', v)} />
+          <StandardTextarea label="사용법" value={form.usage_instructions} onChange={(v) => updateField('usage_instructions', v)} />
+          <StandardTextarea label="효능효과" value={form.functional_claim} onChange={(v) => updateField('functional_claim', v)} />
+          <StandardTextarea label="보관방법" value={form.storage_method} onChange={(v) => updateField('storage_method', v)} />
+          <StandardTextarea label="사용상 주의사항" value={form.usage_precautions} onChange={(v) => updateField('usage_precautions', v)} />
+          <StandardTextarea label="비고" value={form.remarks} onChange={(v) => updateField('remarks', v)} />
+        </div>
+      </section>
+
       <section className="overflow-x-auto border border-[#E5E5E5] bg-white">
         <table className="w-full text-xs">
           <tbody>
@@ -1111,6 +1321,315 @@ function DocumentContent({
       </section>
     </div>
   )
+}
+
+function productToStandardForm(product: ProductDetailProduct): Record<string, string> {
+  return {
+    product_code: product.product_code ?? '',
+    korean_name: product.korean_name ?? '',
+    english_name: product.english_name ?? '',
+    management_code: product.management_code ?? '',
+    cosmetic_type: product.cosmetic_type ?? '',
+    appearance: product.appearance ?? '',
+    usage_instructions: product.usage_instructions ?? '',
+    functional_claim: product.functional_claim ?? '',
+    storage_method: product.storage_method ?? '',
+    label_volume: product.label_volume ?? '',
+    fill_volume: product.fill_volume ?? '',
+    shelf_life: product.shelf_life ?? '',
+    ph_standard: product.ph_standard ?? '',
+    viscosity_standard: product.viscosity_standard ?? '',
+    specific_gravity: product.specific_gravity?.toString() ?? '',
+    packaging_unit: product.packaging_unit ?? '',
+    dosage: product.dosage ?? '',
+    usage_precautions: product.usage_precautions ?? '',
+    remarks: product.remarks ?? '',
+  }
+}
+
+function StandardInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="space-y-1 text-xs">
+      <span className="text-[#666666]">{label}</span>
+      <Input value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="h-8 text-xs" />
+    </label>
+  )
+}
+
+function StandardTextarea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="space-y-1 text-xs md:col-span-2">
+      <span className="text-[#666666]">{label}</span>
+      <Textarea value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="min-h-20 text-xs" />
+    </label>
+  )
+}
+
+function ProductFunctionEditor({
+  bom,
+  onSave,
+  isSaving,
+}: {
+  bom: NormalizedBomItem[]
+  onSave: (input: { ingredientCode: string; componentId?: string; functionValue: string | null }) => void
+  isSaving: boolean
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => bomToFunctionDrafts(bom))
+
+  const updateDraft = (key: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [key]: value }))
+  }
+
+  return (
+    <section className="border border-[#E5E5E5] bg-white">
+      <div className="px-3 py-2 border-b border-[#E5E5E5] bg-[#F9F9F9]">
+        <div className="text-xs font-medium text-[#666666]">제품별 Function 설정</div>
+        <p className="mt-1 text-[11px] text-[#999999]">
+          초기값은 원료 컴포넌트 master function에서 마이그레이션되며, 이후 제품별로 덮어쓸 수 있습니다.
+        </p>
+      </div>
+      <div className="divide-y divide-[#E5E5E5]">
+        {bom.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs text-[#999999]">BOM 데이터가 없습니다.</div>
+        ) : (
+          bom.map((item) => {
+            const ingredientKey = `ingredient:${item.baseCode}`
+            return (
+              <div key={item.baseCode} className="p-3 space-y-2">
+                <div className="grid grid-cols-[1fr_260px_72px] gap-2 items-center">
+                  <div>
+                    <div className="text-xs font-medium text-[#1A1A1A]">{item.materialname}</div>
+                    <div className="font-mono text-[11px] text-[#999999]">{item.baseCode}</div>
+                  </div>
+                  <Input
+                    value={drafts[ingredientKey] ?? ''}
+                    onChange={(e) => updateDraft(ingredientKey, e.target.value)}
+                    className="h-8 text-xs"
+                    placeholder={item.defaultFunction || '원료 function'}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSaving}
+                    onClick={() => onSave({ ingredientCode: item.baseCode, functionValue: drafts[ingredientKey] || null })}
+                    className="h-8 text-xs"
+                  >
+                    저장
+                  </Button>
+                </div>
+                <div className="ml-4 border-l border-[#E5E5E5] pl-3 space-y-1">
+                  {item.components.length === 0 ? (
+                    <div className="text-[11px] text-[#999999]">컴포넌트 없음</div>
+                  ) : (
+                    item.components.map((component) => {
+                      const componentKey = `component:${component.id}`
+                      return (
+                        <div key={component.id} className="grid grid-cols-[1fr_260px_72px] gap-2 items-center">
+                          <div>
+                            <div className="text-[11px] text-[#1A1A1A]">
+                              {renderDash(component.inci_name_en || component.inci_name_kr)}
+                            </div>
+                            <div className="text-[10px] text-[#999999]">
+                              기본값: {renderDash(component.default_function)}
+                              {component.function_source === 'product' ? ' · 제품별 적용중' : ''}
+                            </div>
+                          </div>
+                          <Input
+                            value={drafts[componentKey] ?? ''}
+                            onChange={(e) => updateDraft(componentKey, e.target.value)}
+                            className="h-8 text-xs"
+                            placeholder={component.default_function || '컴포넌트 function'}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isSaving}
+                            onClick={() => onSave({
+                              ingredientCode: item.baseCode,
+                              componentId: component.id,
+                              functionValue: drafts[componentKey] || null,
+                            })}
+                            className="h-8 text-xs"
+                          >
+                            저장
+                          </Button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </section>
+  )
+}
+
+function bomToFunctionDrafts(bom: NormalizedBomItem[]): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const item of bom) {
+    next[`ingredient:${item.baseCode}`] = item.productFunction ?? ''
+    for (const component of item.components) {
+      next[`component:${component.id}`] = component.function ?? ''
+    }
+  }
+  return next
+}
+
+async function downloadDocumentPdf({
+  activeDoc,
+  productDetail,
+  koreanIngredients,
+  englishIngredients,
+  fragranceAllergens,
+  inciMerged,
+  englishSpecs,
+  semiSpecs,
+  finalSpecs,
+  processRecord,
+  processSteps,
+}: {
+  activeDoc: DocId
+  productDetail: ProductDetailData
+  koreanIngredients: KoreanIngredientRow[]
+  englishIngredients: EnglishIngredientRow[]
+  fragranceAllergens: AllergenRow[]
+  inciMerged: InciMergedRow[]
+  englishSpecs: ProductQcSpec[]
+  semiSpecs: ProductQcSpec[]
+  finalSpecs: ProductQcSpec[]
+  processRecord: ProductDetailData['process']['process']
+  processSteps: ProductDetailData['process']['steps']
+}) {
+  const product = productDetail.product
+  if (!product) return
+
+  const [{ default: jsPDF }, { default: autoTable }, { loadKoreanFont }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+    import('@/lib/pdf/fonts'),
+  ])
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  await loadKoreanFont(doc)
+  doc.setFont('NanumGothic', 'normal')
+
+  const margin = 14
+  const title = docLabel(activeDoc)
+  doc.setFontSize(14)
+  doc.text(title, doc.internal.pageSize.getWidth() / 2, 18, { align: 'center' })
+  doc.setFontSize(9)
+  doc.text(`${product.korean_name || product.english_name || product.product_code} / ${product.product_code}`, margin, 28)
+
+  const renderTable = (head: string[], body: (string | number)[][]) => {
+    autoTable(doc, {
+      startY: 34,
+      margin: { left: margin, right: margin },
+      head: [head],
+      body,
+      theme: 'grid',
+      styles: { font: 'NanumGothic', fontSize: 7, cellPadding: 2, lineWidth: 0.1 },
+      headStyles: { fillColor: [238, 238, 238], textColor: [0, 0, 0], fontStyle: 'bold' },
+    })
+  }
+
+  if (activeDoc === 'standard') {
+    renderTable(['항목', '내용'], [
+      ['제품명', renderDash(product.korean_name)],
+      ['영문명', renderDash(product.english_name)],
+      ['제품코드', product.product_code],
+      ['관리번호', renderDash(product.management_code)],
+      ['유형', renderDash(product.cosmetic_type)],
+      ['성상', renderDash(product.appearance)],
+      ['표시용량', renderDash(product.label_volume)],
+      ['충진용량', renderDash(product.fill_volume)],
+      ['사용기한', renderDash(product.shelf_life)],
+      ['사용법', renderDash(product.usage_instructions)],
+      ['효능효과', renderDash(product.functional_claim)],
+      ['보관방법', renderDash(product.storage_method)],
+    ])
+  } else if (activeDoc === 'ingredients-ko') {
+    renderTable(
+      ['No', 'Code', '성분명', '%(W/W)', 'Ref'],
+      koreanIngredients.map((row) => [row.no, row.code, row.ingredientName, row.wtPercent.toFixed(5), row.ref])
+    )
+  } else if (activeDoc === 'ingredients-en') {
+    renderTable(
+      ['No', 'INCI Name', '%(W/W)', 'CAS No', 'Function'],
+      englishIngredients.map((row) => [row.no, row.ingredientName, row.wtPercent.toFixed(5), row.casNo, row.functionName])
+    )
+    if (fragranceAllergens.length > 0) {
+      const finalY = (doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 34
+      autoTable(doc, {
+        startY: finalY + 8,
+        margin: { left: margin, right: margin },
+        head: [['Name', 'CAS No', '%(W/W)']],
+        body: fragranceAllergens.map((row) => [row.name, row.casNo, row.wtPercent.toFixed(6)]),
+        theme: 'grid',
+        styles: { font: 'NanumGothic', fontSize: 7, cellPadding: 2, lineWidth: 0.1 },
+        headStyles: { fillColor: [238, 238, 238], textColor: [0, 0, 0], fontStyle: 'bold' },
+      })
+    }
+  } else if (activeDoc === 'breakdown') {
+    const rows = productDetail.bom.flatMap((item) => {
+      if (item.components.length === 0) {
+        return [[item.materialname, '-', '-', '-']]
+      }
+      return item.components.map((component) => [
+        `${item.materialname} (${item.baseCode})`,
+        renderDash(component.inci_name_en || component.inci_name_kr),
+        component.composition_ratio?.toFixed(4) ?? '-',
+        renderDash(component.cas_number),
+      ])
+    })
+    renderTable(['Raw Material', 'INCI Name', 'Ratio (%)', 'CAS No'], rows)
+  } else if (activeDoc === 'inci-merged') {
+    renderTable(
+      ['No', 'INCI Name', 'CAS No', 'Function', '%(W/W)'],
+      inciMerged.map((row, index) => [index + 1, row.inciName, row.casNo, row.functionName, row.wtPercent.toFixed(5)])
+    )
+  } else if (activeDoc === 'certificate-en') {
+    renderTable(
+      ['TEST ITEMS', 'SPECIFICATIONS', 'RESULTS'],
+      englishSpecs.map((row) => [renderDash(row.test_item_en), renderDash(row.specification_en), renderDash(row.result || 'Pass')])
+    )
+  } else if (activeDoc === 'specs-semi') {
+    renderTable(['No', '시험항목', '규격', '시험방법'], semiSpecs.map((row) => [row.sequence_no ?? '-', renderDash(row.test_item), renderDash(row.specification), renderDash(row.test_method)]))
+  } else if (activeDoc === 'specs-final') {
+    renderTable(['No', '시험항목', '규격', '시험방법'], finalSpecs.map((row) => [row.sequence_no ?? '-', renderDash(row.test_item), renderDash(row.specification), renderDash(row.test_method)]))
+  } else if (activeDoc === 'manufacturing') {
+    renderTable(
+      ['No', '공정명', '작업 내용', '작업 시간'],
+      processSteps.map((row) => [row.step_num, renderDash(row.step_name), renderDash(row.step_desc), renderDash(row.work_time)])
+    )
+    if (processRecord) {
+      doc.text(`배치단위: ${renderDash(processRecord.batch_unit)} / 담당부서: ${renderDash(processRecord.dept_name)}`, margin, 32)
+    }
+  } else {
+    renderTable(
+      ['INCI Name', 'CAS No', '%'],
+      englishIngredients.map((row) => [row.ingredientName, row.casNo, row.wtPercent.toFixed(5)])
+    )
+  }
+
+  doc.save(`${product.product_code}_${activeDoc}.pdf`)
 }
 
 function KVRow({

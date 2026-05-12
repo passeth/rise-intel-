@@ -1762,6 +1762,100 @@ export type Database = {
           },
         ]
       }
+      labdoc_product_ingredient_functions: {
+        Row: {
+          created_at: string | null
+          function: string | null
+          id: string
+          ingredient_code: string
+          product_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          function?: string | null
+          id?: string
+          ingredient_code: string
+          product_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          function?: string | null
+          id?: string
+          ingredient_code?: string
+          product_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labdoc_product_ingredient_functions_ingredient_code_fkey"
+            columns: ["ingredient_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_ingredients"
+            referencedColumns: ["ingredient_code"]
+          },
+          {
+            foreignKeyName: "labdoc_product_ingredient_functions_product_code_fkey"
+            columns: ["product_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_products"
+            referencedColumns: ["product_code"]
+          },
+        ]
+      }
+      labdoc_product_component_functions: {
+        Row: {
+          component_id: string
+          created_at: string | null
+          function: string | null
+          id: string
+          ingredient_code: string
+          product_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          component_id: string
+          created_at?: string | null
+          function?: string | null
+          id?: string
+          ingredient_code: string
+          product_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          component_id?: string
+          created_at?: string | null
+          function?: string | null
+          id?: string
+          ingredient_code?: string
+          product_code?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labdoc_product_component_functions_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "labdoc_ingredient_components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "labdoc_product_component_functions_ingredient_code_fkey"
+            columns: ["ingredient_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_ingredients"
+            referencedColumns: ["ingredient_code"]
+          },
+          {
+            foreignKeyName: "labdoc_product_component_functions_product_code_fkey"
+            columns: ["product_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_products"
+            referencedColumns: ["product_code"]
+          },
+        ]
+      }
       labdoc_product_qc_specs: {
         Row: {
           created_at: string | null
@@ -1992,6 +2086,7 @@ export type Database = {
           p_product_code: string | null
           packaging_unit: string | null
           ph_standard: string | null
+          pif_status: string
           product_code: string
           raw_material_report: number | null
           recommended_age: string | null
@@ -2038,6 +2133,7 @@ export type Database = {
             p_product_code?: string | null
            packaging_unit?: string | null
            ph_standard?: string | null
+           pif_status?: string
            product_code: string
            raw_material_report?: number | null
           recommended_age?: string | null
@@ -2084,6 +2180,7 @@ export type Database = {
             p_product_code?: string | null
            packaging_unit?: string | null
            ph_standard?: string | null
+           pif_status?: string
            product_code?: string
            raw_material_report?: number | null
           recommended_age?: string | null

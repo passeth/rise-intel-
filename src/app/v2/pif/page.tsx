@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -28,7 +30,9 @@ import { useUser } from '@/providers/user-provider'
 import {
   fetchPifProducts,
   updatePifProduct,
+  updatePifProductStatus,
   type PifProduct,
+  type PifStatus,
 } from './actions'
 
 const PAGE_SIZE = 50
@@ -52,6 +56,8 @@ export default function V2PifPage() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [status, setStatus] = useState<PifStatus>('active')
+  const [selectedProductCodes, setSelectedProductCodes] = useState<Set<string>>(new Set())
   const [editingCell, setEditingCell] = useState<{
     productCode: string
     field: string
@@ -64,8 +70,8 @@ export default function V2PifPage() {
   const { isAdmin } = useUser()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['pif-products', search, page],
-    queryFn: () => fetchPifProducts(search, page, PAGE_SIZE),
+    queryKey: ['pif-products', search, page, status],
+    queryFn: () => fetchPifProducts(search, page, PAGE_SIZE, status),
   })
 
   const updateMutation = useMutation({
@@ -80,11 +86,31 @@ export default function V2PifPage() {
     },
   })
 
+  const statusMutation = useMutation({
+    mutationFn: updatePifProductStatus,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error || '상태 변경에 실패했습니다')
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['pif-products'] })
+      setSelectedProductCodes(new Set())
+      toast.success(`${result.updated}개 제품을 ${result.updated > 0 ? (status === 'active' ? 'inactive' : 'active') : ''} 상태로 변경했습니다`)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '상태 변경에 실패했습니다')
+    },
+  })
+
   const products = data?.products ?? []
   const totalCount = data?.total ?? 0
+  const statusCounts = data?.statusCounts ?? { active: 0, inactive: 0 }
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasNext = page < totalPages
   const hasPrev = page > 1
+  const selectedCount = selectedProductCodes.size
+  const allVisibleSelected =
+    products.length > 0 && products.every((product) => selectedProductCodes.has(product.product_code))
 
   useEffect(() => {
     if (editingCell && editInputRef.current) {
@@ -95,6 +121,7 @@ export default function V2PifPage() {
   const handleSearch = () => {
     setSearch(searchInput)
     setPage(1)
+    setSelectedProductCodes(new Set())
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -140,6 +167,37 @@ export default function V2PifPage() {
   const handleEditKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') saveEdit()
     else if (e.key === 'Escape') cancelEditing()
+  }
+
+  const handleStatusTabChange = (value: string) => {
+    setStatus(value === 'inactive' ? 'inactive' : 'active')
+    setPage(1)
+    setSelectedProductCodes(new Set())
+  }
+
+  const toggleProductSelection = (productCode: string, checked: boolean) => {
+    const next = new Set(selectedProductCodes)
+    if (checked) next.add(productCode)
+    else next.delete(productCode)
+    setSelectedProductCodes(next)
+  }
+
+  const toggleVisibleSelection = (checked: boolean) => {
+    const next = new Set(selectedProductCodes)
+    for (const product of products) {
+      if (checked) next.add(product.product_code)
+      else next.delete(product.product_code)
+    }
+    setSelectedProductCodes(next)
+  }
+
+  const bulkTargetStatus: PifStatus = status === 'active' ? 'inactive' : 'active'
+
+  const handleBulkStatusUpdate = () => {
+    statusMutation.mutate({
+      productCodes: Array.from(selectedProductCodes),
+      status: bulkTargetStatus,
+    })
   }
 
   const renderCell = (product: PifProduct, col: ColumnDef) => {
@@ -258,6 +316,36 @@ export default function V2PifPage() {
         )}
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <Tabs value={status} onValueChange={handleStatusTabChange}>
+          <TabsList className="bg-white border border-[#E5E5E5]">
+            <TabsTrigger value="active" className="text-xs">
+              Active ({statusCounts.active.toLocaleString()})
+            </TabsTrigger>
+            <TabsTrigger value="inactive" className="text-xs">
+              Inactive ({statusCounts.inactive.toLocaleString()})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#666666]">
+              {selectedCount.toLocaleString()}개 선택
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkStatusUpdate}
+              disabled={selectedCount === 0 || statusMutation.isPending}
+              className="h-8 text-xs"
+            >
+              선택 제품 {bulkTargetStatus === 'active' ? 'Active' : 'Inactive'} 처리
+            </Button>
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl border border-[#E5E5E5] shadow-sm overflow-hidden flex flex-col">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -276,7 +364,17 @@ export default function V2PifPage() {
               <Table className="w-full border-collapse">
                 <TableHeader className="bg-[#F9F9F9] sticky top-0 z-20">
                   <TableRow className="border-b border-[#E5E5E5]">
-                    <TableHead className="sticky left-0 z-20 bg-[#F9F9F9] w-28 text-xs font-semibold text-[#666666] whitespace-nowrap shadow-[1px_0_0_0_#E5E5E5]">
+                    {isAdmin && (
+                      <TableHead className="sticky left-0 z-30 bg-[#F9F9F9] w-10 px-2 shadow-[1px_0_0_0_#E5E5E5]">
+                        <Checkbox
+                          checked={allVisibleSelected}
+                          onCheckedChange={(value) => toggleVisibleSelection(value === true)}
+                          aria-label="현재 페이지 제품 전체 선택"
+                          className="h-4 w-4"
+                        />
+                      </TableHead>
+                    )}
+                    <TableHead className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-20 bg-[#F9F9F9] w-28 text-xs font-semibold text-[#666666] whitespace-nowrap shadow-[1px_0_0_0_#E5E5E5]`}>
                       제품코드
                     </TableHead>
                     {columns.map((col) => (
@@ -295,7 +393,19 @@ export default function V2PifPage() {
                       key={product.id}
                       className="border-b border-[#E5E5E5] hover:bg-[#F9F9F9]/50"
                     >
-                      <TableCell className="sticky left-0 z-10 bg-white p-2 border-r border-[#E5E5E5] shadow-[1px_0_0_0_#E5E5E5]">
+                      {isAdmin && (
+                        <TableCell className="sticky left-0 z-20 bg-white p-2 border-r border-[#E5E5E5] shadow-[1px_0_0_0_#E5E5E5]">
+                          <Checkbox
+                            checked={selectedProductCodes.has(product.product_code)}
+                            onCheckedChange={(value) =>
+                              toggleProductSelection(product.product_code, value === true)
+                            }
+                            aria-label={`${product.product_code} 선택`}
+                            className="h-4 w-4"
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-10 bg-white p-2 border-r border-[#E5E5E5] shadow-[1px_0_0_0_#E5E5E5]`}>
                         <div className="flex items-center gap-1">
                           <Link
                             href={`/v2/pif/${encodeURIComponent(product.product_code)}`}
