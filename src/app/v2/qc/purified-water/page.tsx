@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -109,7 +110,15 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
       <button className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/90 grid place-items-center" onClick={onClose}>
         <X size={16} />
       </button>
-      <img src={src} alt={alt} className="max-w-[90vw] max-h-[90vh] rounded" onClick={(e) => e.stopPropagation()} />
+      <Image
+        src={src}
+        alt={alt}
+        width={1200}
+        height={900}
+        unoptimized
+        className="max-w-[90vw] max-h-[90vh] rounded object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
     </div>
   )
 }
@@ -118,7 +127,15 @@ function ClickableImage({ src, alt, className }: { src: string; alt: string; cla
   const [open, setOpen] = useState(false)
   return (
     <>
-      <img src={src} alt={alt} className={`${className || ''} cursor-pointer`} onClick={() => setOpen(true)} />
+      <Image
+        src={src}
+        alt={alt}
+        width={200}
+        height={200}
+        unoptimized
+        className={`${className || ''} cursor-pointer`}
+        onClick={() => setOpen(true)}
+      />
       {open ? <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} /> : null}
     </>
   )
@@ -240,7 +257,7 @@ async function generateWaterCertificatePdf(cert: WaterCertificate): Promise<Blob
             reader.onloadend = () => resolve(reader.result as string)
             reader.readAsDataURL(blob)
           })
-          const img = new Image()
+          const img = new window.Image()
           await new Promise<void>((resolve) => {
             img.onload = () => resolve()
             img.src = dataUrl

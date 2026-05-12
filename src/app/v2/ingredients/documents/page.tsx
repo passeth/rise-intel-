@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ import { fetchIngredients, type LabIngredientRow } from '../actions'
 
 const PAGE_SIZE = 50
 const FETCH_SIZE = 5000
+const EMPTY_INGREDIENTS: LabIngredientRow[] = []
 
 const DOC_CATEGORIES = [
   { key: 'coa_urls' as const, label: 'COA' },
@@ -247,7 +248,7 @@ export default function V2IngredientsDocumentsPage() {
     placeholderData: (previousData) => previousData,
   })
 
-  const allIngredients = data?.ingredients ?? []
+  const allIngredients = data?.ingredients ?? EMPTY_INGREDIENTS
 
   const filteredIngredients = useMemo(() => {
     if (!showOnlyWithDocs) return allIngredients
@@ -270,12 +271,6 @@ export default function V2IngredientsDocumentsPage() {
     return filteredIngredients.slice(from, from + PAGE_SIZE)
   }, [filteredIngredients, safePage])
 
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages)
-    }
-  }, [page, totalPages])
-
   const handleSearch = () => {
     setSearch(searchInput.trim())
     setPage(1)
@@ -289,7 +284,7 @@ export default function V2IngredientsDocumentsPage() {
     const pages: number[] = []
     const maxVisible = 7
     let start = Math.max(1, safePage - Math.floor(maxVisible / 2))
-    let end = Math.min(totalPages, start + maxVisible - 1)
+    const end = Math.min(totalPages, start + maxVisible - 1)
     if (end - start + 1 < maxVisible) {
       start = Math.max(1, end - maxVisible + 1)
     }

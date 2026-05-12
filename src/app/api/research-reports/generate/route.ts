@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     // ── Step 2: Gather DB context ──
     // For formula_analysis, context is the ingredient list itself, not a single ingredient lookup
     const ctx = reportType === 'formula_analysis'
-      ? buildFormulaContext(subjectName || inciNameNormalized, formulaIngredients || [])
+      ? buildFormulaContext(subjectName || inciNameNormalized)
       : await gatherIngredientContext(supabase, inciNameNormalized)
 
     // ── Step 3: Build prompt and call Claude ──
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 
 // ── Helper: Build minimal context for formula analysis (no single-ingredient DB lookup) ──
 
-function buildFormulaContext(subjectName: string, ingredientNames: string[]): IngredientContext {
+function buildFormulaContext(subjectName: string): IngredientContext {
   return {
     inci_name: subjectName,
     korean_name: null,

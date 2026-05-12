@@ -436,16 +436,16 @@ export default function AllInOneDocsPage() {
                 <InfoRow label="비중 (25℃)" value={product.specific_gravity?.toString()} />
                 <InfoRow label="pH (25℃)" value={product.ph_standard} />
                 <InfoRow label="점경도" value={product.viscosity_standard} />
-                <InfoRow label="권장사용나이" value={(product as any).recommended_age} />
+                <InfoRow label="권장사용나이" value={product.recommended_age} />
                 <InfoRow label="유형/성상" value={`${product.cosmetic_type || '-'} / ${product.appearance || '-'}`} />
                 <InfoRow label="사용기한" value={product.shelf_life} />
-                <InfoRow label="재활용등급" value={(product as any).recycling_grade} />
-                <InfoRow label="문안표기 부자재" value={(product as any).label_position} />
+                <InfoRow label="재활용등급" value={product.recycling_grade} />
+                <InfoRow label="문안표기 부자재" value={product.label_position} />
                 
                 <div className="col-span-1 md:col-span-2 pt-4 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <BoolRow label="원료목록보고" value={(product as any).raw_material_report} />
-                  <BoolRow label="표준화명칭" value={(product as any).standardized_name} />
-                  <BoolRow label="책임판매업" value={(product as any).responsible_seller} />
+                  <BoolRow label="원료목록보고" value={product.raw_material_report} />
+                  <BoolRow label="표준화명칭" value={product.standardized_name} />
+                  <BoolRow label="책임판매업" value={product.responsible_seller} />
                   <BoolRow label="알러지표기" value={product.allergen_korean} />
                 </div>
               </div>
@@ -885,7 +885,7 @@ function InfoRow({ label, value }: { label: string; value: string | undefined | 
   );
 }
 
-function BoolRow({ label, value }: { label: string; value: any }) {
+function BoolRow({ label, value }: { label: string; value: boolean | string | null | undefined }) {
   const isTrue = value === true || value === "Y" || value === "Yes" || (typeof value === 'string' && value.length > 0);
   return (
     <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded">

@@ -53,6 +53,8 @@ interface BrowseResponse {
   error?: string
 }
 
+const EMPTY_FILE_ENTRIES: FileEntry[] = []
+
 function formatFileSize(bytes: number | null): string {
   if (bytes === null) return '—'
   if (bytes < 1024) return `${bytes} B`
@@ -256,7 +258,7 @@ export default function SubsidiaryMaterialsPage() {
     }
   }, [decodedProductCode, currentSubpath, queryClient])
 
-  const items = data?.items ?? []
+  const items = data?.items ?? EMPTY_FILE_ENTRIES
   const productFolder = data?.productFolder ?? null
 
   const canCreateNewOrder = useMemo(() => {

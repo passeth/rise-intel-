@@ -30,10 +30,14 @@ import {
 } from 'lucide-react'
 import {
   fetchProductDetail,
+  type NormalizedBomItem,
   type ProductDetailData,
   type ProductQcSpec,
 } from './actions'
 import { fetchPifProducts, type PifProduct } from '../actions'
+
+const EMPTY_BOM: NormalizedBomItem[] = []
+const EMPTY_SPECS: ProductQcSpec[] = []
 
 type DocId =
   | 'standard'
@@ -207,8 +211,8 @@ export default function V2PifDetailPage() {
   })
 
   const product = data?.product ?? null
-  const bom = data?.bom ?? []
-  const specs = data?.specs ?? []
+  const bom = data?.bom ?? EMPTY_BOM
+  const specs = data?.specs ?? EMPTY_SPECS
   const images = data?.images ?? []
   const processRecord = data?.process.process ?? null
   const processSteps = data?.process.steps ?? []

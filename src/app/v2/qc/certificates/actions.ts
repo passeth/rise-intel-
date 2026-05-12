@@ -1,11 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import type { Json } from '@/types/supabase'
 
-type SupabaseAny = any
-function fromTable(supabase: SupabaseAny, table: string) {
-  return supabase.from(table)
-}
 
 export interface TestCertificate {
   id: string
@@ -74,6 +71,24 @@ export type CertificateResultsRow =
   | StabilityCertificateResult
   | MltCertificateResult
 
+type RawCertificateRow = Omit<TestCertificate, 'results' | 'product_name'> & {
+  results: unknown
+  labdoc_products?: { korean_name: string | null } | null
+}
+
+function normalizeCertificateRow(
+  certificate: RawCertificateRow,
+  productName: string | null
+): TestCertificate {
+  return {
+    ...certificate,
+    results: Array.isArray(certificate.results)
+      ? (certificate.results as CertificateResultsRow[])
+      : [],
+    product_name: productName,
+  }
+}
+
 export type SortField =
   | 'certificate_no'
   | 'product_code'
@@ -115,10 +130,10 @@ export async function fetchCertificates(
 
   const supabase = await createClient()
 
-  let countQuery = fromTable(supabase, 'labdoc_test_certificates')
+  let countQuery = supabase.from('labdoc_test_certificates')
     .select('id', { count: 'exact', head: true })
 
-  let query = fromTable(supabase, 'labdoc_test_certificates')
+  let query = supabase.from('labdoc_test_certificates')
     .select('*, labdoc_products!inner(korean_name)')
 
   if (qcType) {
@@ -154,7 +169,7 @@ export async function fetchCertificates(
 
   if (error) {
     console.error('fetchCertificates error:', error)
-    let fallbackQuery = fromTable(supabase, 'labdoc_test_certificates')
+    let fallbackQuery = supabase.from('labdoc_test_certificates')
       .select('*')
       .order(sortField, { ascending })
 
@@ -172,24 +187,25 @@ export async function fetchCertificates(
     }
 
     return {
-      certificates: (fallbackData ?? []).map((c: any) => ({
-        ...c,
-        results: (c.results ?? []) as CertificateResultsRow[],
-        product_name: null,
-      })) as TestCertificate[],
+      certificates: (fallbackData ?? []).map((c) =>
+        normalizeCertificateRow(c as RawCertificateRow, null)
+      ),
       totalCount,
       error: null,
     }
   }
 
-  const certificates = (data ?? []).map((c: any) => {
+  const certificates = (data ?? []).map((c) => {
+    const certificate = c as RawCertificateRow
+    const normalized = normalizeCertificateRow(
+      certificate,
+      certificate.labdoc_products?.korean_name ?? null
+    )
     return {
-      ...c,
-      results: (c.results ?? []) as CertificateResultsRow[],
-      product_name: c.labdoc_products?.korean_name ?? null,
+      ...normalized,
       labdoc_products: undefined,
     }
-  }) as TestCertificate[]
+  })
 
   return { certificates, totalCount, error: null }
 }
@@ -244,7 +260,7 @@ export async function generateCertificateNo(): Promise<string> {
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
   const prefix = `QC-${dateStr}-`
 
-  const { count } = await fromTable(supabase, 'labdoc_test_certificates')
+  const { count } = await supabase.from('labdoc_test_certificates')
     .select('id', { count: 'exact', head: true })
     .like('certificate_no', `${prefix}%`)
 
@@ -274,7 +290,7 @@ export async function createCertificate(data: {
 }): Promise<{ certificate: TestCertificate | null; error?: string }> {
   const supabase = await createClient()
 
-  const { data: inserted, error } = await fromTable(supabase, 'labdoc_test_certificates')
+  const { data: inserted, error } = await supabase.from('labdoc_test_certificates')
     .insert({
       product_code: data.product_code,
       qc_type: data.qc_type,
@@ -292,7 +308,7 @@ export async function createCertificate(data: {
       tester: data.tester || null,
       approver: data.approver || null,
       overall_judgment: data.overall_judgment,
-      results: data.results,
+      results: data.results as unknown as Json,
       notes: data.notes || null,
     })
     .select()
@@ -306,7 +322,7 @@ export async function createCertificate(data: {
   return {
     certificate: {
       ...inserted,
-      results: (inserted.results ?? []) as CertificateResultsRow[],
+      results: (inserted.results ?? []) as unknown as CertificateResultsRow[],
     } as unknown as TestCertificate,
   }
 }
@@ -353,7 +369,7 @@ export async function updateCertificate(
   if (data.results !== undefined) updateData.results = data.results
   if (data.notes !== undefined) updateData.notes = data.notes || null
 
-  const { error } = await fromTable(supabase, 'labdoc_test_certificates')
+  const { error } = await supabase.from('labdoc_test_certificates')
     .update(updateData)
     .eq('id', id)
 
@@ -371,7 +387,7 @@ export async function updateCertificatePdfUrl(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  const { error } = await fromTable(supabase, 'labdoc_test_certificates')
+  const { error } = await supabase.from('labdoc_test_certificates')
     .update({ pdf_url: pdfUrl, updated_at: new Date().toISOString() })
     .eq('id', id)
 

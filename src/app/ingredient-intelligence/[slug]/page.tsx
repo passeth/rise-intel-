@@ -19,14 +19,18 @@ import {
   fetchIngredientProfile, type IngredientProfile,
   fetchInternalUsage, type InternalUsageItem,
   fetchBomProducts, type BomProductItem,
-  fetchMarketStats, type MarketStats,
-  fetchSafetyData, type SafetyData,
+  fetchMarketStats,
+  fetchSafetyData,
   fetchRegulations, type RegulationItem,
   fetchCooccurrence,
   fetchReportsByIngredient,
   deleteReport,
   searchIngredients,
 } from './actions'
+
+type IngredientProfileWithFlags = IngredientProfile & {
+  ai_summary_generated?: boolean | null
+}
 
 /**
  * Clean scraped INCIDecoder details text.
@@ -242,6 +246,8 @@ export default function IngredientDetailPage() {
     )
   }
 
+  const profileWithFlags = profile as IngredientProfileWithFlags
+
   return (
     <div className="container mx-auto max-w-[1200px] px-4 py-6 text-[#1A1A1A]">
       {/* Back Navigation */}
@@ -285,7 +291,7 @@ export default function IngredientDetailPage() {
                    </span>
                 )}
                 {/* Assuming legacy or AI flags exist on profile based on prompt requirements, if not present we skip safely */}
-                {(profile as any).ai_summary_generated && (
+                {profileWithFlags.ai_summary_generated && (
                    <span className="flex items-center text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100" title="AI Summary Generated">
                     <Brain size={10} className="mr-1" /> AI
                    </span>
@@ -359,7 +365,7 @@ export default function IngredientDetailPage() {
           })()}
 
           {/* Efficacy & Mechanisms */}
-          {(profile.efficacy_kr || profile.key_mechanisms || (profile as any).skin_benefits) && (
+          {(profile.efficacy_kr || profile.key_mechanisms || profile.skin_benefits) && (
             <Card className="border-[#E5E5E5] shadow-sm bg-white p-6">
               <h3 className="text-base font-semibold text-[#1A1A1A] mb-3 flex items-center">
                 <FlaskConical className="w-4 h-4 mr-2 text-purple-500" /> 효능 & 메커니즘
@@ -377,10 +383,10 @@ export default function IngredientDetailPage() {
                     <p>{profile.key_mechanisms}</p>
                   </div>
                 )}
-                {!(profile.efficacy_kr || profile.key_mechanisms) && (profile as any).skin_benefits && (
+                {!(profile.efficacy_kr || profile.key_mechanisms) && profile.skin_benefits && (
                   <div>
                     <h4 className="font-medium text-[#1A1A1A] mb-1">Skin Benefits (Legacy)</h4>
-                    <p>{(profile as any).skin_benefits}</p>
+                    <p>{profile.skin_benefits}</p>
                   </div>
                 )}
               </div>
@@ -398,11 +404,11 @@ export default function IngredientDetailPage() {
           )}
 
           {/* Clinical Studies Summary */}
-          {(profile.clinical_studies_summary || (profile as any).vp_clinical_studies) && (
+          {(profile.clinical_studies_summary || profile.vp_clinical_studies) && (
             <Card className="border-[#E5E5E5] shadow-sm bg-white p-6">
               <h3 className="text-base font-semibold text-[#1A1A1A] mb-3">임상연구 요약</h3>
               <p className="text-sm text-[#444444] whitespace-pre-wrap">
-                {profile.clinical_studies_summary || (profile as any).vp_clinical_studies}
+                {profile.clinical_studies_summary || profile.vp_clinical_studies}
               </p>
             </Card>
           )}
@@ -695,7 +701,7 @@ export default function IngredientDetailPage() {
                   <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-gray-300" /></div>
                 ) : cooccurrence && cooccurrence.length > 0 ? (
                   <div className="space-y-2">
-                    {cooccurrence.map((item: any, i: number) => (
+                    {cooccurrence.map((item, i) => (
                        <Link 
                         key={i} 
                         href={`/ingredient-intelligence/${encodeURIComponent(item.slug || '')}`}

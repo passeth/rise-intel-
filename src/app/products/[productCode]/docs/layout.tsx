@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { usePathname, useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useRef } from 'react'
+import { usePathname, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
@@ -56,7 +56,6 @@ const docLinks: DocLink[] = [
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { productCode } = useParams<{ productCode: string }>()
   const decodedProductCode = decodeURIComponent(productCode)
   const basePath = `/products/${productCode}/docs`

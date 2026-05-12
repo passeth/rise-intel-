@@ -287,7 +287,7 @@ export async function generateCertificateNo(): Promise<string> {
 
     const sequenceStr = String(sequence).padStart(3, '0')
     return `${prefix}${sequenceStr}`
-  } catch (err) {
+  } catch {
     const today = new Date()
     const year = today.getFullYear()
     const month = String(today.getMonth() + 1).padStart(2, '0')

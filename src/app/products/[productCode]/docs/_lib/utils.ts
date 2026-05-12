@@ -66,6 +66,12 @@ export interface LabProduct {
   msds_type?: string | null
   msds_alcohol_content?: number | null
   msds_flammability?: string | null
+  recommended_age?: string | null
+  recycling_grade?: string | null
+  label_position?: string | null
+  raw_material_report?: string | boolean | null
+  standardized_name?: string | boolean | null
+  responsible_seller?: string | boolean | null
   dosage: string | null
   usage_precautions: string | null
   remarks: string | null

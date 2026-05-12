@@ -88,7 +88,7 @@ async function listRecursive(prefix: string): Promise<string[]> {
 async function getExistingPaths(): Promise<Set<string>> {
   const existing = new Set<string>()
   const PAGE = 1000
-  let offset = 0
+  const offset = 0
 
   while (true) {
     const { data } = await intel.storage.from(BUCKET).list('', {

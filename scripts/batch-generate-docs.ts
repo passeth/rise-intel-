@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFile } from 'fs/promises'
+import { readFileSync } from 'fs'
 import { join, resolve } from 'path'
 import jsPDF from 'jspdf'
 
-const envContent = require('fs').readFileSync(resolve(process.cwd(), '.env.local'), 'utf-8')
+const envContent = readFileSync(resolve(process.cwd(), '.env.local'), 'utf-8')
 const envVars: Record<string, string> = {}
 envContent.split('\n').forEach((line: string) => {
   const match = line.match(/^([^#=]+)=(.*)$/)

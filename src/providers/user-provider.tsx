@@ -65,7 +65,7 @@ export function useUser() {
 export function UserProvider({ children, initialUser }: UserProviderProps) {
   const [user, setUser] = useState<UserData | null>(initialUser ?? null)
   // Always start with loading false if we have initialUser, otherwise check on mount
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading] = useState(false)
 
   const fetchUserWithRole = useCallback(async (authUser: User | null) => {
     if (!authUser) {

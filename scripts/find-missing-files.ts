@@ -2,8 +2,6 @@
  * 양쪽 DB의 storage.objects에서 파일명 추출 후 비교
  * MCP SQL 대신 Supabase REST API 사용
  */
-import { createClient } from '@supabase/supabase-js'
-
 function requireEnv(name: string): string {
   const value = process.env[name]
   if (!value) {

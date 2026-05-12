@@ -263,10 +263,6 @@ export default function CertificatesPage() {
   const [year, setYear] = useState<number | null>(null)
   const queryClient = useQueryClient()
 
-  useEffect(() => {
-    setPage(1)
-  }, [activeTab, search, year, sortField, sortDir])
-
   const { data: certData, isLoading } = useQuery({
     queryKey: ['certificates', activeTab, search, page, sortField, sortDir, year],
     queryFn: () =>
@@ -286,6 +282,7 @@ export default function CertificatesPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   const handleSort = (field: SortField) => {
+    setPage(1)
     if (sortField === field) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
     } else {
@@ -321,7 +318,13 @@ export default function CertificatesPage() {
         </Dialog>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as QcType)}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          setActiveTab(v as QcType)
+          setPage(1)
+        }}
+      >
         <div className="flex items-center justify-between gap-4">
           <TabsList className="h-9">
             <TabsTrigger value="반제품" className="text-sm px-4">
@@ -347,7 +350,10 @@ export default function CertificatesPage() {
           <div className="flex items-center gap-2 flex-1 justify-end">
             <Select
               value={year?.toString() ?? 'all'}
-              onValueChange={(v) => setYear(v === 'all' ? null : Number(v))}
+              onValueChange={(v) => {
+                setYear(v === 'all' ? null : Number(v))
+                setPage(1)
+              }}
             >
               <SelectTrigger className="h-8 w-[110px] text-sm">
                 <SelectValue placeholder="연도" />
@@ -370,7 +376,10 @@ export default function CertificatesPage() {
               <Input
                 placeholder="성적서번호, LOT, 제품코드 검색..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
                 className="pl-9 h-8 text-sm"
               />
             </div>
@@ -626,7 +635,7 @@ function CertificateViewModal({ isOpen, onClose, certificate }: CertificateViewM
           ? '적합'
           : '부적합'
         : (editData.overall_judgment || '적합')
-      const { success: _success, error } = await updateCertificate(certificate.id, {
+      const { error } = await updateCertificate(certificate.id, {
         ...editData,
         overall_judgment: overallJudgment,
         notes: buildCertificateNotes(certificate.qc_type as QcType, {

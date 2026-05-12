@@ -1,5 +1,5 @@
 import { login, loginWithGoogle } from './actions'
-import { Microscope, Boxes, LayoutDashboard, ArrowRight, ShieldCheck, Activity, ChevronRight } from 'lucide-react'
+import { Microscope, Boxes, LayoutDashboard, ShieldCheck, Activity, ChevronRight } from 'lucide-react'
 
 export default async function LoginPage({
   searchParams,
