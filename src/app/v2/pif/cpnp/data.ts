@@ -452,7 +452,8 @@ export async function fetchCpnpGenerationHistory(
   const from = (safePage - 1) * safeLimit
   const to = from + safeLimit - 1
 
-  const queryUnknownTable = supabase.from as unknown as (table: string) => {
+  const queryUnknownTable = (table: string) =>
+    supabase.from(table as never) as unknown as {
     select: (columns: string) => {
       order: (column: string, options: { ascending: boolean }) => {
         range: (
@@ -473,6 +474,10 @@ export async function fetchCpnpGenerationHistory(
     .range(from, to)
 
   if (error) {
+    if (error.message.includes("Could not find the table 'public.cpnp_document_generations'")) {
+      return []
+    }
+
     throw new Error(error.message)
   }
 

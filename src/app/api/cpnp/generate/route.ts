@@ -171,11 +171,13 @@ export async function POST(request: NextRequest) {
             const url = await uploadFile(pdfBlob, filePath)
 
             const generatedAt = new Date().toISOString()
-            const insertIntoUnknownTable = supabase.from as unknown as (table: string) => {
-              insert: (
-                values: Record<string, unknown>
-              ) => Promise<{ error: { message: string } | null }>
-            }
+            const insertIntoUnknownTable = (table: string) =>
+              supabase.from(table as never) as unknown as {
+                insert: (
+                  values: Record<string, unknown>
+                ) => Promise<{ error: { message: string } | null }>
+              }
+
             const { error: dbError } = await insertIntoUnknownTable('cpnp_document_generations').insert({
               product_code: productCode,
               document_type: type,
@@ -188,6 +190,13 @@ export async function POST(request: NextRequest) {
             })
 
             if (dbError) {
+              if (dbError.message.includes("Could not find the table 'public.cpnp_document_generations'")) {
+                return {
+                  type,
+                  url,
+                }
+              }
+
               throw new Error(`DB insert failed: ${dbError.message}`)
             }
 
