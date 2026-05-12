@@ -38,7 +38,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CPNP_DOCUMENT_TYPES } from './constants'
-import { fetchCpnpGenerationHistory } from './data'
+import { CpnpDocumentHtmlPreview } from './document-preview'
+import { fetchCpnpGenerationHistory, fetchCpnpProductData } from './data'
 import type {
   CpnpDocumentResult,
   CpnpDocumentType,
@@ -52,6 +53,7 @@ const PAGE_SIZE = 20
 type PreviewDocument = {
   url: string
   title: string
+  type: CpnpDocumentType
   productCode?: string
   productName?: string
 }
@@ -134,6 +136,12 @@ export default function V2PifCpnpPage() {
   const historyQuery = useQuery({
     queryKey: ['cpnp-history'],
     queryFn: () => fetchCpnpGenerationHistory(1, 20),
+  })
+
+  const previewDataQuery = useQuery({
+    queryKey: ['cpnp-preview-data', previewDocument?.productCode],
+    queryFn: () => fetchCpnpProductData(previewDocument?.productCode ?? ''),
+    enabled: Boolean(previewDocument?.productCode),
   })
 
   const { data, isLoading } = useQuery({
@@ -283,14 +291,6 @@ export default function V2PifCpnpPage() {
     setPreviewDocument(document)
   }
 
-  const getPreviewUrl = (url: string) => {
-    if (url.includes('#')) {
-      return url
-    }
-
-    return `${url}#toolbar=1&navpanes=0&view=FitH`
-  }
-
   const renderDocumentResult = (
     documentResult: CpnpDocumentResult,
     productResult: CpnpProductResult
@@ -319,6 +319,7 @@ export default function V2PifCpnpPage() {
                 handlePreviewDocument({
                   url: documentResult.url!,
                   title: documentTitle,
+                  type: documentResult.type,
                   productCode: productResult.productCode,
                   productName: productResult.productName,
                 })
@@ -807,6 +808,7 @@ export default function V2PifCpnpPage() {
                                 handlePreviewDocument({
                                   url: historyItem.pdf_url!,
                                   title: documentTypeInfo?.label ?? historyItem.document_type,
+                                  type: historyItem.document_type as CpnpDocumentType,
                                   productCode: historyItem.product_code,
                                 })
                               }
@@ -862,7 +864,7 @@ export default function V2PifCpnpPage() {
           <DialogHeader className="border-b border-[#E5E5E5] bg-white px-5 py-3 pr-12">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Badge className="h-5 bg-[#1A1A1A] px-2 text-[10px] text-white hover:bg-[#1A1A1A]">
-                PDF
+                HTML
               </Badge>
               <DialogTitle className="truncate text-sm font-semibold text-[#1A1A1A]">
                 {previewDocument?.title ?? '문서 미리보기'}
@@ -884,17 +886,21 @@ export default function V2PifCpnpPage() {
               )}
             </div>
             <DialogDescription className="sr-only">
-              생성된 PDF 문서를 화면에서 확인합니다.
+              생성된 문서 내용을 HTML 미리보기로 확인합니다.
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 bg-[#3A3A3A]">
-            {previewDocument?.url ? (
-              <iframe
-                key={previewDocument.url}
-                src={getPreviewUrl(previewDocument.url)}
-                title={`${previewDocument.title} PDF 미리보기`}
-                className="h-full w-full border-0 bg-[#3A3A3A]"
-              />
+          <div className="min-h-0 flex-1 overflow-auto bg-[#4A4A4A] p-6">
+            {previewDataQuery.isLoading ? (
+              <div className="flex h-full items-center justify-center text-sm text-white">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                문서 데이터를 불러오는 중...
+              </div>
+            ) : previewDataQuery.isError ? (
+              <div className="flex h-full items-center justify-center text-sm text-white">
+                문서 데이터를 불러오지 못했습니다.
+              </div>
+            ) : previewDocument && previewDataQuery.data ? (
+              <CpnpDocumentHtmlPreview type={previewDocument.type} data={previewDataQuery.data} />
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-white">
                 미리볼 문서가 없습니다
