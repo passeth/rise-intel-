@@ -49,7 +49,7 @@ export function Header({ onMenuClick, user }: HeaderProps) {
         </Button>
 
         {/* 로고 */}
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <Link href="/v2" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <span className="font-bold text-xl">RISE INTEL</span>
           <span className="text-sm text-muted-foreground hidden sm:inline">LAB</span>
         </Link>

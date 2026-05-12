@@ -122,6 +122,17 @@ export default function BomUploadPage() {
     }
   }, [newProducts, selectedCodes])
 
+  const filteredProducts = useMemo(() => {
+    if (!productSearch) return newProducts
+    const q = productSearch.toLowerCase()
+    return newProducts.filter(
+      (p) =>
+        p.productCode.toLowerCase().includes(q) ||
+        p.productName.toLowerCase().includes(q) ||
+        p.semiProductCode.toLowerCase().includes(q)
+    )
+  }, [newProducts, productSearch])
+
   // Selection helpers
   const toggleSelect = (code: string) => {
     setSelectedCodes((prev) => {
@@ -134,17 +145,6 @@ export default function BomUploadPage() {
 
   const selectAll = () => setSelectedCodes(new Set(filteredProducts.map((p) => p.productCode)))
   const deselectAll = () => setSelectedCodes(new Set())
-
-  const filteredProducts = useMemo(() => {
-    if (!productSearch) return newProducts
-    const q = productSearch.toLowerCase()
-    return newProducts.filter(
-      (p) =>
-        p.productCode.toLowerCase().includes(q) ||
-        p.productName.toLowerCase().includes(q) ||
-        p.semiProductCode.toLowerCase().includes(q)
-    )
-  }, [newProducts, productSearch])
 
   // Preview stats
   const previewStats = parsedRows.length > 0
@@ -171,7 +171,7 @@ export default function BomUploadPage() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex items-center gap-3 mb-6">
-        <Link href="/products" className="text-slate-400 hover:text-slate-600">
+        <Link href="/v2/pif" className="text-slate-400 hover:text-slate-600">
           <ArrowLeft size={20} />
         </Link>
         <div>
@@ -448,7 +448,7 @@ export default function BomUploadPage() {
               <Button onClick={handleReset} variant="outline" className="flex-1">
                 추가 업로드
               </Button>
-              <Link href="/products" className="flex-1">
+              <Link href="/v2/pif" className="flex-1">
                 <Button className="w-full bg-amber-500 hover:bg-amber-600">제품 목록으로</Button>
               </Link>
             </div>

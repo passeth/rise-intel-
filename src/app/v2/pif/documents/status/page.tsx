@@ -38,6 +38,8 @@ type DocType = {
   countKey: 'coa_count' | 'msds_count' | 'composition_count' | 'ifra_count'
 }
 
+const EMPTY_PRODUCTS: SupplierDocumentStatus[] = []
+
 const DOC_TYPES: DocType[] = [
   { key: 'COA', label: 'COA', countKey: 'coa_count' },
   { key: 'MSDS', label: 'MSDS', countKey: 'msds_count' },
@@ -49,7 +51,7 @@ function getPaginationPages(currentPage: number, totalPages: number): number[] {
   const pages: number[] = []
   const maxVisible = 7
   let start = Math.max(1, currentPage - Math.floor(maxVisible / 2))
-  let end = Math.min(totalPages, start + maxVisible - 1)
+  const end = Math.min(totalPages, start + maxVisible - 1)
 
   if (end - start + 1 < maxVisible) {
     start = Math.max(1, end - maxVisible + 1)
@@ -227,7 +229,7 @@ function ExpandedIngredientDetail({ details }: { details: MissingDocDetail[] }) 
               <TableRow key={detail.ingredient_code} className="border-b border-[#E5E5E5]">
                 <TableCell className="font-mono text-xs">
                   <Link
-                    href={`/ingredients/${detail.ingredient_code}`}
+                    href={`/v2/ingredients/${detail.ingredient_code}`}
                     className="text-blue-600 hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -270,7 +272,7 @@ export default function V2PifDocumentStatusPage() {
     queryFn: () => fetchSupplierDocumentStatus(search, page, PAGE_SIZE),
   })
 
-  const products = data?.items ?? []
+  const products = data?.items ?? EMPTY_PRODUCTS
   const totalCount = data?.total ?? 0
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasPrev = page > 1
