@@ -9,6 +9,7 @@ import {
   type LabProduct,
   type NormalizedBomItem,
 } from "./_lib/utils";
+import { BomQuickLink } from "./_components/bom-quick-link";
 import {
   Loader2,
   AlertCircle,
@@ -134,6 +135,7 @@ export default function AllInOneDocsPage() {
   // State
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [productNotFound, setProductNotFound] = useState(false);
 
   const [product, setProduct] = useState<LabProduct | null>(null);
   const [images, setImages] = useState<ProductImage[]>([]);
@@ -151,11 +153,17 @@ export default function AllInOneDocsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setProductNotFound(false);
     try {
       const supabase = getSupabase();
 
       // 1. Fetch Product & BOM
       const bomResult = await fetchProductWithBom(decodedProductCode);
+      if (bomResult.productNotFound) {
+        setProductNotFound(true);
+        setLoading(false);
+        return;
+      }
       if (bomResult.error) {
         setError(bomResult.error);
         setLoading(false);
@@ -366,6 +374,7 @@ export default function AllInOneDocsPage() {
 
 
   if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>;
+  if (productNotFound) return <BomQuickLink productCode={decodedProductCode} onLinked={fetchData} />;
   if (error || !product) return <div className="flex h-96 flex-col items-center justify-center text-red-500"><AlertCircle className="mb-2 h-10 w-10" /><p>{error || "Product not found"}</p></div>;
 
   return (

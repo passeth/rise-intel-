@@ -260,6 +260,7 @@ export default function LabIngredientsPage() {
                 <TableHead className="w-[120px] text-xs font-medium text-[#666666]">INCI Name (KR)</TableHead>
                 <TableHead className="w-[80px] text-xs font-medium text-[#666666]">CAS No</TableHead>
                 <TableHead className="w-[40px] text-right text-xs font-medium text-[#666666]">%</TableHead>
+                <TableHead className="w-[50px] text-center text-xs font-medium text-[#666666]">합</TableHead>
                 <TableHead className="w-[50px] text-center text-xs font-medium text-[#666666]">문서</TableHead>
                 <TableHead className="w-[32px] text-center text-xs font-medium text-[#666666]"></TableHead>
               </TableRow>
@@ -267,7 +268,7 @@ export default function LabIngredientsPage() {
             <TableBody>
               {isLoading && ingredients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-40 text-center text-[#999999]">
+                  <TableCell colSpan={10} className="h-40 text-center text-[#999999]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="h-6 w-6 animate-spin" />
                       <span>데이터를 불러오는 중...</span>
@@ -276,15 +277,16 @@ export default function LabIngredientsPage() {
                 </TableRow>
               ) : ingredients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-40 text-center text-[#999999]">
+                  <TableCell colSpan={10} className="h-40 text-center text-[#999999]">
                     검색 결과가 없습니다.
                   </TableCell>
                 </TableRow>
               ) : (
                 ingredients.map((item) => {
-                  const comps = item.components ?? []
-                  const rowCount = Math.max(comps.length, 1)
-                  const docCount = getTotalDocCount(item)
+                   const comps = item.components ?? []
+                   const rowCount = Math.max(comps.length, 1)
+                   const docCount = getTotalDocCount(item)
+                   const ratioSum = comps.reduce((sum, c) => sum + (c.composition_ratio ?? 0), 0)
 
                   return (
                     <Fragment key={item.id}>
@@ -332,6 +334,18 @@ export default function LabIngredientsPage() {
                             </TableCell>
                             {isFirst && (
                               <>
+                                <TableCell
+                                  rowSpan={rowCount}
+                                  className={`text-center py-2 align-middle border-l border-slate-100 text-[11px] font-mono ${
+                                    comps.length === 0
+                                      ? 'text-[#E5E5E5]'
+                                      : Math.abs(ratioSum - 100) < 0.01
+                                      ? 'text-slate-700'
+                                      : 'text-red-500 font-bold'
+                                  }`}
+                                >
+                                  {comps.length === 0 ? '—' : ratioSum.toFixed(1)}
+                                </TableCell>
                                 <TableCell
                                   rowSpan={rowCount}
                                   className="text-center py-2 align-middle border-l border-slate-100"

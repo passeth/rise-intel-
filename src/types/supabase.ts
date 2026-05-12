@@ -1351,6 +1351,62 @@ export type Database = {
           },
         ]
       }
+      labdoc_ingredient_physical_properties: {
+        Row: {
+          id: string
+          ingredient_code: string
+          property_name: string
+          property_name_en: string | null
+          property_name_kr: string | null
+          value_text: string | null
+          value_min: number | null
+          value_max: number | null
+          unit: string | null
+          source: string | null
+          notes: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          ingredient_code: string
+          property_name: string
+          property_name_en?: string | null
+          property_name_kr?: string | null
+          value_text?: string | null
+          value_min?: number | null
+          value_max?: number | null
+          unit?: string | null
+          source?: string | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          ingredient_code?: string
+          property_name?: string
+          property_name_en?: string | null
+          property_name_kr?: string | null
+          value_text?: string | null
+          value_min?: number | null
+          value_max?: number | null
+          unit?: string | null
+          source?: string | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labdoc_ingredient_physical_properties_ingredient_code_fkey"
+            columns: ["ingredient_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_ingredients"
+            referencedColumns: ["ingredient_code"]
+          },
+        ]
+      }
       labdoc_ingredient_receipts: {
         Row: {
           coa_reference: string | null
@@ -1748,6 +1804,59 @@ export type Database = {
         }
         Relationships: []
       }
+      labdoc_product_msds_properties: {
+        Row: {
+          id: string
+          product_code: string
+          property_name: string
+          property_name_en: string | null
+          calculated_value: string | null
+          calculated_numeric: number | null
+          override_value: string | null
+          calculation_method: string | null
+          auto_calculated: boolean | null
+          last_calculated_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          product_code: string
+          property_name: string
+          property_name_en?: string | null
+          calculated_value?: string | null
+          calculated_numeric?: number | null
+          override_value?: string | null
+          calculation_method?: string | null
+          auto_calculated?: boolean | null
+          last_calculated_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          product_code?: string
+          property_name?: string
+          property_name_en?: string | null
+          calculated_value?: string | null
+          calculated_numeric?: number | null
+          override_value?: string | null
+          calculation_method?: string | null
+          auto_calculated?: boolean | null
+          last_calculated_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labdoc_product_msds_properties_product_code_fkey"
+            columns: ["product_code"]
+            isOneToOne: false
+            referencedRelation: "labdoc_products"
+            referencedColumns: ["product_code"]
+          },
+        ]
+      }
       labdoc_product_revisions: {
         Row: {
           created_at: string | null
@@ -1877,6 +1986,9 @@ export type Database = {
           label_position: string | null
           label_volume: string | null
           management_code: string | null
+          msds_alcohol_content: number | null
+          msds_flammability: string | null
+          msds_type: string | null
           p_product_code: string | null
           packaging_unit: string | null
           ph_standard: string | null
@@ -1919,8 +2031,11 @@ export type Database = {
            korean_name?: string | null
            label_position?: string | null
            label_volume?: string | null
-           management_code?: string | null
-           p_product_code?: string | null
+            management_code?: string | null
+            msds_alcohol_content?: number | null
+            msds_flammability?: string | null
+            msds_type?: string | null
+            p_product_code?: string | null
            packaging_unit?: string | null
            ph_standard?: string | null
            product_code: string
@@ -1962,8 +2077,11 @@ export type Database = {
            korean_name?: string | null
            label_position?: string | null
            label_volume?: string | null
-           management_code?: string | null
-           p_product_code?: string | null
+            management_code?: string | null
+            msds_alcohol_content?: number | null
+            msds_flammability?: string | null
+            msds_type?: string | null
+            p_product_code?: string | null
            packaging_unit?: string | null
            ph_standard?: string | null
            product_code?: string
@@ -1982,6 +2100,27 @@ export type Database = {
           usage_instructions?: string | null
           usage_precautions?: string | null
           viscosity_standard?: string | null
+        }
+        Relationships: []
+      }
+      labdoc_msds_settings: {
+        Row: {
+          setting_key: string
+          caution_threshold: number
+          flammable_threshold: number
+          updated_at: string
+        }
+        Insert: {
+          setting_key: string
+          caution_threshold?: number
+          flammable_threshold?: number
+          updated_at?: string
+        }
+        Update: {
+          setting_key?: string
+          caution_threshold?: number
+          flammable_threshold?: number
+          updated_at?: string
         }
         Relationships: []
       }

@@ -1,0 +1,6 @@
+﻿ingredient_code,material_name,component_count,composition_ratio_sum,deviation,affected_product_count,affected_products
+MDS-0012,"Silight 10M DS",3,0,-100,1,"PDLB001"
+MAA-0016,"Anti-Shadow Complex",4,0,-100,1,"RSEX000"
+MXM-0003,"Mihapol PQ11-20",3,100.5,0.5,1,"AOHE001"
+MAP-0030,"Phyto Aqua HA-05",6,100.25,0.25,4,"FJAP005; FJCR004; JOPK006; RSEX000"
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO",6,100.2,0.2,1,"JOEC001"

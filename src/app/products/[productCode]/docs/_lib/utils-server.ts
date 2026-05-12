@@ -15,9 +15,9 @@ export async function fetchProductWithBomServer(productCode: string) {
 
   if (productErr) {
     if (productErr.code === 'PGRST116') {
-      return { product: null, bomItems: [], error: '품목을 찾을 수 없습니다' }
+      return { product: null, bomItems: [] as NormalizedBomItem[], error: null, productNotFound: true }
     }
-    return { product: null, bomItems: [], error: productErr.message }
+    return { product: null, bomItems: [] as NormalizedBomItem[], error: productErr.message, productNotFound: false }
   }
 
   let bomItems: NormalizedBomItem[] = []
@@ -72,5 +72,5 @@ export async function fetchProductWithBomServer(productCode: string) {
     }
   }
 
-  return { product: product as LabProduct, bomItems, error: null }
+  return { product: product as LabProduct, bomItems, error: null, productNotFound: false }
 }

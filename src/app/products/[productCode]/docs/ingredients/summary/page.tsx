@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { fetchProductWithBom, type LabProduct, type NormalizedBomItem } from "../../_lib/utils";
+import { BomQuickLink } from "../../_components/bom-quick-link";
 import { Loader2, AlertCircle, Printer, FileDown } from "lucide-react";
 import { generateInciSummaryPdf } from "@/lib/doc-gen/pdf-inci-summary";
 import { generateCsv } from "@/lib/doc-gen/csv";
@@ -21,13 +22,16 @@ export default function SummaryPage() {
   const [bomItems, setBomItems] = useState<NormalizedBomItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [productNotFound, setProductNotFound] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const fetchData = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setProductNotFound(false);
     try {
       const result = await fetchProductWithBom(decodedProductCode);
-      if (result.error) { setError(result.error); } else { setProduct(result.product); setBomItems(result.bomItems); }
+      if (result.productNotFound) { setProductNotFound(true); }
+      else if (result.error) { setError(result.error); }
+      else { setProduct(result.product); setBomItems(result.bomItems); }
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to load data"); }
     finally { setLoading(false); }
   }, [decodedProductCode]);
@@ -114,6 +118,7 @@ export default function SummaryPage() {
   };
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={22} className="animate-spin text-amber-500" /></div>;
+  if (productNotFound) return <BomQuickLink productCode={decodedProductCode} onLinked={fetchData} />;
   if (error || !product) return <div className="bg-white rounded-xl border border-slate-200 p-12 text-center"><AlertCircle size={48} className="mx-auto text-red-400 mb-3" /><p className="text-red-500 text-sm">{error || "Product not found"}</p></div>;
 
   return (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import {
   ChevronLeft, FileText, FlaskConical, History, Download, ExternalLink,
-  Loader2, Pencil, Save, Plus, Trash2, X,
+  Loader2, Pencil, Save, Plus, Trash2, X, Upload,
 } from 'lucide-react'
 
 // Local actions
@@ -36,8 +36,13 @@ import {
   fetchIngredientComponents,
   fetchIngredientReceiptsByCode,
   fetchIngredientSpecsByCode,
+  updateIngredientComponents,
+  uploadIngredientDocument,
+  deleteIngredientDocument,
   type IngredientDetail,
   type IngredientReceiptRow,
+  type ComponentInput,
+  type DocumentCategory,
 } from './actions'
 
 // Shared actions from receipts page
@@ -572,50 +577,139 @@ function CertificatePreviewModal({
 }
 
 // ── Document List Component with Preview Popup ──
-function DocumentList({ docs }: { docs: string[] }) {
+function DocumentList({ 
+  docs, 
+  ingredientCode, 
+  category, 
+  onRefresh 
+}: { 
+  docs: string[]
+  ingredientCode: string
+  category: DocumentCategory
+  onRefresh: () => void
+}) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const previewFileName = previewUrl ? decodeURIComponent(previewUrl.split('/').pop() || 'document') : ''
 
-  if (docs.length === 0) {
-    return <div className="text-sm text-gray-500 py-8 text-center bg-gray-50 rounded-md">등록된 문서가 없습니다.</div>
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const { error } = await uploadIngredientDocument(ingredientCode, category, formData)
+        if (error) {
+          toast.error(`${file.name} 업로드 실패: ${error}`)
+        }
+      }
+      toast.success('업로드 완료')
+      onRefresh()
+    } catch {
+      toast.error('업로드 중 오류가 발생했습니다')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleDelete = async (url: string) => {
+    if (!confirm('이 문서를 삭제하시겠습니까?')) return
+    setDeleting(url)
+    try {
+      const { error } = await deleteIngredientDocument(ingredientCode, category, url)
+      if (error) {
+        toast.error('삭제 실패: ' + error)
+      } else {
+        toast.success('삭제되었습니다')
+        onRefresh()
+      }
+    } catch {
+      toast.error('삭제 중 오류가 발생했습니다')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {docs.map((url, idx) => {
-          const fileName = decodeURIComponent(url.split('/').pop() || 'document')
-          return (
-            <div
-              key={idx}
-              className="border border-gray-200 rounded-lg p-3 bg-white flex items-center justify-between shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
-              onClick={() => setPreviewUrl(url)}
-            >
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="bg-red-50 text-red-500 p-2 rounded">
-                  <FileText size={20} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate" title={fileName}>{fileName}</div>
-                  <div className="text-xs text-gray-400">PDF Document</div>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-gray-400 hover:text-blue-600"
-                  onClick={(e) => { e.stopPropagation(); window.open(url, '_blank') }}
-                >
-                  <ExternalLink size={14} />
-                </Button>
-              </div>
-            </div>
-          )
-        })}
+      <div className="mb-3">
+        <input
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg"
+          multiple
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs h-7"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+        >
+          {uploading ? (
+            <Loader2 size={14} className="mr-1 animate-spin" />
+          ) : (
+            <Upload size={14} className="mr-1" />
+          )}
+          {uploading ? '업로드 중...' : '업로드'}
+        </Button>
       </div>
 
-      {/* Document Preview Popup */}
+      {docs.length === 0 ? (
+        <div className="text-sm text-gray-500 py-8 text-center bg-gray-50 rounded-md">등록된 문서가 없습니다.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {docs.map((url, idx) => {
+            const fileName = decodeURIComponent(url.split('/').pop() || 'document')
+            const isDeleting = deleting === url
+            return (
+              <div
+                key={idx}
+                className="border border-gray-200 rounded-lg p-3 bg-white flex items-center justify-between shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => setPreviewUrl(url)}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="bg-red-50 text-red-500 p-2 rounded">
+                    <FileText size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate" title={fileName}>{fileName}</div>
+                    <div className="text-xs text-gray-400">PDF Document</div>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-400 hover:text-blue-600"
+                    onClick={(e) => { e.stopPropagation(); window.open(url, '_blank') }}
+                  >
+                    <ExternalLink size={14} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-gray-400 hover:text-red-600"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(url) }}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <Dialog open={!!previewUrl} onOpenChange={(open) => { if (!open) setPreviewUrl(null) }}>
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] p-0 flex flex-col" showCloseButton={false} aria-describedby={undefined}>
           <DialogHeader className="px-4 py-3 border-b bg-gray-50 flex-shrink-0">
@@ -658,6 +752,9 @@ export default function IngredientDetailPage() {
   const ingredientCode = decodeURIComponent(rawCode)
   const queryClient = useQueryClient()
   const [selectedReceipt, setSelectedReceipt] = useState<ExtendedReceipt | null>(null)
+  const [editingComps, setEditingComps] = useState(false)
+  const [editComps, setEditComps] = useState<ComponentInput[]>([])
+  const [savingComps, setSavingComps] = useState(false)
 
   // 1. Ingredient Detail
   const { data: detailData, isLoading: detailLoading } = useQuery({
@@ -685,6 +782,67 @@ export default function IngredientDetailPage() {
   const handleCertChanged = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['ingredient-receipts', ingredientCode] })
   }, [queryClient, ingredientCode])
+
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['ingredient-detail', ingredientCode] })
+  }, [queryClient, ingredientCode])
+
+  const startEditComps = useCallback(() => {
+    setEditComps(components.map((c) => ({
+      id: c.id,
+      inci_name_en: c.inci_name_en,
+      inci_name_kr: c.inci_name_kr,
+      cas_number: c.cas_number,
+      composition_ratio: c.composition_ratio,
+      function: c.function,
+      component_order: c.component_order,
+    })))
+    setEditingComps(true)
+  }, [components])
+
+  const cancelEditComps = useCallback(() => {
+    setEditingComps(false)
+    setEditComps([])
+  }, [])
+
+  const saveEditComps = useCallback(async () => {
+    setSavingComps(true)
+    try {
+      const { error } = await updateIngredientComponents(ingredientCode, editComps)
+      if (error) {
+        toast.error('저장 실패: ' + error)
+      } else {
+        toast.success('저장되었습니다')
+        setEditingComps(false)
+        setEditComps([])
+        queryClient.invalidateQueries({ queryKey: ['ingredient-components', ingredientCode] })
+      }
+    } catch {
+      toast.error('저장 중 오류가 발생했습니다')
+    } finally {
+      setSavingComps(false)
+    }
+  }, [ingredientCode, editComps, queryClient])
+
+  const addEditComp = useCallback(() => {
+    const maxOrder = editComps.reduce((max, c) => Math.max(max, c.component_order), 0)
+    setEditComps((prev) => [...prev, {
+      inci_name_en: null,
+      inci_name_kr: null,
+      cas_number: null,
+      composition_ratio: null,
+      function: null,
+      component_order: maxOrder + 1,
+    }])
+  }, [editComps])
+
+  const removeEditComp = useCallback((index: number) => {
+    setEditComps((prev) => prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, component_order: i + 1 })))
+  }, [])
+
+  const updateEditComp = useCallback((index: number, field: keyof ComponentInput, value: string | number | null) => {
+    setEditComps((prev) => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
+  }, [])
 
   const openCertificate = (receipt: IngredientReceiptRow) => {
     if (!ingredient) return
@@ -743,46 +901,154 @@ export default function IngredientDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* 2. Components Table */}
         <div className="lg:col-span-1">
-          <Card className="border-[#E5E5E5] shadow-sm h-full">
+          <Card className="border-[#E5E5E5] shadow-sm">
             <CardHeader className="pb-3 border-b border-gray-100 bg-gray-50/50">
               <CardTitle className="text-sm font-bold flex items-center justify-between">
                 <span className="flex items-center gap-2"><FlaskConical size={16} className="text-amber-500" /> 성분 조성</span>
-                <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">{components.length}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">{editingComps ? editComps.length : components.length}</Badge>
+                  {!editingComps ? (
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={startEditComps}>
+                      <Pencil size={12} className="mr-1" /> 편집
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button variant="default" size="sm" className="h-6 px-2 text-xs" onClick={saveEditComps} disabled={savingComps}>
+                        {savingComps ? <Loader2 size={12} className="mr-1 animate-spin" /> : <Save size={12} className="mr-1" />}
+                        {savingComps ? '저장 중...' : '저장'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={cancelEditComps} disabled={savingComps}>
+                        취소
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50/30 hover:bg-gray-50/30">
-                    <TableHead className="w-[40px] text-[11px] h-9">#</TableHead>
-                    <TableHead className="text-[11px] h-9">성분명 (INCI)</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">%</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {components.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-gray-400 text-xs">등록된 성분 정보가 없습니다.</TableCell>
-                    </TableRow>
-                  ) : (
-                    components.map((comp, idx) => (
-                      <TableRow key={comp.id} className="hover:bg-gray-50">
-                        <TableCell className="text-[11px] py-2 text-gray-500">{idx + 1}</TableCell>
-                        <TableCell className="text-[11px] py-2">
-                          <div className="font-medium text-gray-900">{comp.inci_name_en || '-'}</div>
-                          <div className="text-gray-500 text-[10px]">{comp.inci_name_kr}</div>
-                          {comp.cas_number && <div className="text-gray-400 text-[10px] mt-0.5">CAS: {comp.cas_number}</div>}
-                        </TableCell>
-                        <TableCell className="text-[11px] py-2 text-right font-mono">
-                          {comp.composition_ratio ? `${comp.composition_ratio}%` : '-'}
-                        </TableCell>
+              {editingComps ? (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50/30 hover:bg-gray-50/30">
+                        <TableHead className="w-[30px] text-[11px] h-9">#</TableHead>
+                        <TableHead className="text-[11px] h-9">INCI Name EN</TableHead>
+                        <TableHead className="text-[11px] h-9">INCI Name KR</TableHead>
+                        <TableHead className="text-[11px] h-9">CAS No</TableHead>
+                        <TableHead className="w-[60px] text-[11px] h-9 text-right">%</TableHead>
+                        <TableHead className="w-[30px] text-[11px] h-9"></TableHead>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {editComps.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-gray-400 text-xs">성분을 추가해주세요.</TableCell>
+                        </TableRow>
+                      ) : (
+                        editComps.map((comp, idx) => (
+                          <TableRow key={idx} className="hover:bg-gray-50">
+                            <TableCell className="text-[11px] py-2 text-gray-500">{idx + 1}</TableCell>
+                            <TableCell className="text-[11px] py-2">
+                              <Input
+                                value={comp.inci_name_en || ''}
+                                onChange={(e) => updateEditComp(idx, 'inci_name_en', e.target.value || null)}
+                                className="h-6 text-[10px]"
+                                placeholder="INCI Name EN"
+                              />
+                            </TableCell>
+                            <TableCell className="text-[11px] py-2">
+                              <Input
+                                value={comp.inci_name_kr || ''}
+                                onChange={(e) => updateEditComp(idx, 'inci_name_kr', e.target.value || null)}
+                                className="h-6 text-[10px]"
+                                placeholder="INCI Name KR"
+                              />
+                            </TableCell>
+                            <TableCell className="text-[11px] py-2">
+                              <Input
+                                value={comp.cas_number || ''}
+                                onChange={(e) => updateEditComp(idx, 'cas_number', e.target.value || null)}
+                                className="h-6 text-[10px]"
+                                placeholder="CAS No"
+                              />
+                            </TableCell>
+                            <TableCell className="text-[11px] py-2 text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={comp.composition_ratio ?? ''}
+                                onChange={(e) => updateEditComp(idx, 'composition_ratio', e.target.value ? parseFloat(e.target.value) : null)}
+                                className="h-6 text-[10px] w-14 text-right"
+                                placeholder="%"
+                              />
+                            </TableCell>
+                            <TableCell className="text-[11px] py-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-red-500 hover:text-red-700"
+                                onClick={() => removeEditComp(idx)}
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <div className="p-2 border-t">
+                    <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={addEditComp}>
+                      <Plus size={12} className="mr-1" /> 추가
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50/30 hover:bg-gray-50/30">
+                      <TableHead className="w-[40px] text-[11px] h-9">#</TableHead>
+                      <TableHead className="text-[11px] h-9">성분명 (INCI)</TableHead>
+                      <TableHead className="text-[11px] h-9 text-right">%</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {components.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-8 text-gray-400 text-xs">등록된 성분 정보가 없습니다.</TableCell>
+                      </TableRow>
+                    ) : (
+                      components.map((comp, idx) => (
+                        <TableRow key={comp.id} className="hover:bg-gray-50">
+                          <TableCell className="text-[11px] py-2 text-gray-500">{idx + 1}</TableCell>
+                          <TableCell className="text-[11px] py-2">
+                            <div className="font-medium text-gray-900">{comp.inci_name_en || '-'}</div>
+                            <div className="text-gray-500 text-[10px]">{comp.inci_name_kr}</div>
+                            {comp.cas_number && <div className="text-gray-400 text-[10px] mt-0.5">CAS: {comp.cas_number}</div>}
+                          </TableCell>
+                          <TableCell className="text-[11px] py-2 text-right font-mono">
+                            {comp.composition_ratio ? `${comp.composition_ratio}%` : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+              {(() => {
+                const displayComps = editingComps ? editComps : components
+                const totalRatio = displayComps.reduce((sum, c) => sum + (c.composition_ratio || 0), 0)
+                const ratioValid = Math.abs(totalRatio - 100) < 0.01
+                return (
+                  <div className={`px-3 py-2 text-xs border-t flex justify-between ${ratioValid ? 'text-gray-500 bg-gray-50' : 'text-red-600 bg-red-50'}`}>
+                    <span>합계</span>
+                    <span className="font-mono">{totalRatio.toFixed(2)}%</span>
+                  </div>
+                )
+              })()}
             </CardContent>
           </Card>
+
         </div>
 
         {/* 3. Documents Tabs */}
@@ -804,12 +1070,12 @@ export default function IngredientDetailPage() {
                   <TabsTrigger value="others" className="text-xs px-3 py-1.5 h-8">기타 <span className="ml-1.5 bg-gray-200 text-gray-600 text-[10px] px-1 rounded-sm">{ingredient.other_urls.length}</span></TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="coa"><DocumentList docs={ingredient.coa_urls} /></TabsContent>
-                <TabsContent value="comp"><DocumentList docs={ingredient.composition_urls} /></TabsContent>
-                <TabsContent value="msds-en"><DocumentList docs={ingredient.msds_en_urls} /></TabsContent>
-                <TabsContent value="msds-kr"><DocumentList docs={ingredient.msds_kr_urls} /></TabsContent>
-                <TabsContent value="fragrance"><DocumentList docs={ingredient.fragrance_urls} /></TabsContent>
-                <TabsContent value="others"><DocumentList docs={ingredient.other_urls} /></TabsContent>
+                <TabsContent value="coa"><DocumentList docs={ingredient.coa_urls} ingredientCode={ingredient.ingredient_code} category="coa_urls" onRefresh={handleRefresh} /></TabsContent>
+                <TabsContent value="comp"><DocumentList docs={ingredient.composition_urls} ingredientCode={ingredient.ingredient_code} category="composition_urls" onRefresh={handleRefresh} /></TabsContent>
+                <TabsContent value="msds-en"><DocumentList docs={ingredient.msds_en_urls} ingredientCode={ingredient.ingredient_code} category="msds_en_urls" onRefresh={handleRefresh} /></TabsContent>
+                <TabsContent value="msds-kr"><DocumentList docs={ingredient.msds_kr_urls} ingredientCode={ingredient.ingredient_code} category="msds_kr_urls" onRefresh={handleRefresh} /></TabsContent>
+                <TabsContent value="fragrance"><DocumentList docs={ingredient.fragrance_urls} ingredientCode={ingredient.ingredient_code} category="fragrance_urls" onRefresh={handleRefresh} /></TabsContent>
+                <TabsContent value="others"><DocumentList docs={ingredient.other_urls} ingredientCode={ingredient.ingredient_code} category="other_urls" onRefresh={handleRefresh} /></TabsContent>
               </Tabs>
             </CardContent>
           </Card>

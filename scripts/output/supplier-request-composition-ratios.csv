@@ -1,0 +1,9 @@
+﻿우선순위,원료코드,원료명,공급처,INCI 성분명,조성비,CAS No,영향 품목수,기존 성분비 자료,요청사항
+최우선,MVC-0010,Esaflor EC3,lamberti / (주)코스파인,"Guar Hydroxypropyltrimonium Chloride, Water","90,10","65497-29-2, 7732-18-5",84,있음(미기재),각 성분별 조성비(%) 자료 요청
+높음,MPK-0001,Kathon CG,Dupont / ㈜태창물산,"5-Chloro-2-methyl-4-isothiazolin-3-one, 2-Methyl-4-isothiazolin-3-one, Magnesium Chloride, Magnesium dinitrate, Water",,"26172-55-4, 2682-20-4, 7786-30-3, 10377-60-3, 7732-18-5",18,없음,각 성분별 조성비(%) 자료 요청
+높음,MAN-0011,Nanoactive RAL,HANGZHOU LINGEBA TECHNOLOGY / 에코텍아이앤씨,"Retinal, Phospholipids, Caprylic /capric/linoleic triglyceride, Ascorbic acid, glycerin, Aqua","1.0, 3.5, 26.5, 0.2, 35, 33.8","116-31-4, 123465-35-0, 65381-09-01, 50-81-7, 56-81-5, 7732-18-5",14,있음(미기재),각 성분별 조성비(%) 자료 요청
+높음,MOF-0006,Florasun-90,한주씨앤씨,"Helianthus Annuus (Sunflower) Seed Oil, Tocopherol","99.95, 0.05","8001-21-6, 1406-18-4",14,있음(미기재),각 성분별 조성비(%) 자료 요청
+중간,MSE-0025,Eumulgin HPS,BASF / ㈜한백씨앤에프,"Coceth-7, PPG-1-PEG-9 Lauryl Glycol Ether, PEG-40 Hydrogenated Castor Oil, Aqua / Water","39.02, 39.02, 14.64, 7.32","61791-13-7, 154248-98-3, 61788-85-0, 7732-18-5",8,있음(미기재),각 성분별 조성비(%) 자료 요청
+중간,MVA-0007,Adekanol GT-730,hanskorea / (주)블루켐,"PEG-240/HDI Copolymer Bis-Decyltetradeceth-20 Ether, Butylene Glycol, Water, Potassium Laurate, Tocopherol","29.94, 50.00, 20.00, 0.03, 0.03","283175-22-4 / 428442-71-1, 107-88-0, 7732-18-5, 10124-65-9, 1406-18-4 / 1406-66-2",4,있음(미기재),각 성분별 조성비(%) 자료 요청
+낮음,MVB-0003,Bentone Gel VS5PC-V,이현에프앤씨,"Cyclopentasiloxane, Disteardimonium Hectorite, Propylene Carbonate","80.65, 13.44, 5.91","541-02-6, 94891-31-3 / 97280-96-1, 108-32-7",2,있음(미기재),각 성분별 조성비(%) 자료 요청
+낮음,MPS-0001,Spectrastat,(미확인),"Caprylyl Glycol, Glycerin, Caprylhydroxamic Acid","70, 15, 15","1117-86-8, 56-81-5, 7377-03-9",1,없음,각 성분별 조성비(%) 자료 요청

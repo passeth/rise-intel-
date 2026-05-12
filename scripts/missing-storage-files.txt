@@ -1,0 +1,43 @@
+=== documents (missing: 5) ===
+weighing-instructions/weighing_B6053.pdf
+weighing-instructions/weighing_B6054.pdf
+weighing-instructions/weighing_M6036.pdf
+weighing-instructions/weighing_M6037.pdf
+weighing-instructions/weighing_S6056.pdf
+
+=== ingredients-documents (missing: 35) ===
+ingredients/MAA-0022/msds-en/MAA-0022_MSDS_eng_AQUASILICONE_SUCROSE_DISTEARATEPEG-2M.doc
+ingredients/MAB-0014/comp/MAB-0014_Comp_Blue Complex H.pdf
+ingredients/MAG-0033/comp/MAG-0033_Comp_Ginsenoside Exosome 
+ingredients/MAG-0033/others/01. Ginsenoside Exosome 
+ingredients/MAG-0033/others/02-1. Ginsenoside Exosome 
+ingredients/MAG-0033/others/03-1. Ginsenoside Exosome 
+ingredients/MAI-0005/comp/MAI-0005_Comp_B_-HD.pdf
+ingredients/MAJ-0004/msds-en/MAJ-0004_MSDS_eng.pdf
+ingredients/MAM-0036/coa/MAM-0036_COA_-HD.pdf
+ingredients/MAV-0002/comp/MAV-0002_Comp_DL-alpha-Tocopheryl_Acetate.pdf
+ingredients/MAV-0002/msds-en/MAV-0002_MSDS_eng_Vitamin-E_Acetate.pdf
+MAG-0029/COA/MAG-0029_COA_001.pdf
+MFP-0014/MSDS_EN/MFP-0014_MSDS_EN_001.pdf
+MPP-0005/MSDS_KR/MPP-0005_MSDS_KR_001.pdf
+MSE-0026/MSDS_KR/MSE-0026_MSDS_KR_001.pdf
+MVA-0009/COA/MVA-0009_COA_001.pdf
+MVC-0010/COMP/MVC-0010_COMP_001.pdf
+unmatched/MDD-0001_DRY-FLO_PC/MDD-0001_COA_DRY-FLO_PC.pdf
+unmatched/MDS-0016_Silnos_130/MDS-0016_MSDS_eng_SILNOS_130.pdf
+unmatched/MFB-0047_Body_Care_76826BF/MFB-0047_ALLERGY_DATA_BODY_CARE_76826.xlsx
+unmatched/MFL-0007_Frag_-_LS2120/MFL-0007_ALLERGEN_LIST_LS2120.xls
+unmatched/MFP-0020_Perfume B20023LF/MFP-0020_MSDS(eng)_PERFUME B20023.pdf
+unmatched/MFS-0076_SP-53050/MFS-0076_ALLERGEN LIST_SP-53050.xlsx
+unmatched/MLM-0003_Mipearl_GS/MLM-0003_COA_Mipearl_GS.pdf
+unmatched/MOL-0002-LILY_70_LP70/MOL-0002_MSDS_eng_LILY70_LP70.pdf
+unmatched/MOM-0004_Mipearl CO/MOM-0004_COA_Mipearl CO.pdf
+unmatched/MSE-0026_Zicos_SU-20/MSE-0026_MSDS_eng_ZICOS_SU-20.pdf
+unmatched/MSE-0028_Etomix - HC25/MSE-0028_MSDS(eng)_Etomix - HC25.pdf
+unmatched/MSS-0010_SeraSol_SC_83-A_SM3330P/MSS-0010_COA_eng_SM3330P.pdf
+unmatched/MUM-0001_Misorb_BPS-9/MUM-0001_COA_Misorb_BPS9.pdf
+unmatched/MVC-0004_Carbopol-941/MVC-0004_COA_Carbopol 941.pdf
+unmatched/MVN-0002_Natural_Cellulose_Powder/MVN-0002_COA_NATURAL_CELLULOSE.pdf
+unmatched/MWL-0003_Lauric_Acid_Edenor_C12-99_MY_/MWL-0003_MSDS_kor_C1299.pdf
+unmatched/MWP-0011_Performa SW 84 synthetic wax (Performalene 400)/MWP-0011_MSDS(eng)_PERFORMA(TM) SW-84 Synthetic Wax.pdf
+unmatched/MXB-0005_BioGenic_MagicSpear-100AB/BioGenic_MagicSpear-100AB_CS_P_-EX-1.0.E_220224.pdf

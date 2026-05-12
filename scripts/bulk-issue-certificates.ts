@@ -8,9 +8,17 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
+
 const SUPABASE_URL = 'https://usvjbuudnofwhmclwhfl.supabase.co'
-const SUPABASE_SERVICE_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzdmpidXVkbm9md2htY2x3aGZsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjQzMzg2OCwiZXhwIjoyMDg3NzkzODY4fQ.L-zU-vLk44o6wFl-qDXoQbBjCubsrzCgdVFkUm5JdyE'
+const SUPABASE_SERVICE_KEY = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 

@@ -3,3 +3,9 @@ node_modules
 .env*.local
 .DS_Store
 .sisyphus/
+.vercel
+.omc/
+.omx/
+.mcp.json
+opencode.json
+tsconfig.tsbuildinfo

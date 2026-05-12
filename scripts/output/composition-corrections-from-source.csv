@@ -1,0 +1,64 @@
+﻿ingredient_code,material_name,status,current_ratio_sum,corrected_ratio_sum,affected_product_count,source,component_inci_name,current_ratio,corrected_ratio
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Water",84.9,84.9
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Lavandula Angustifolia (Lavender) Flower Water",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Salvia Sclarea (Clary) Extract",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Hyacinthus Orientalis (Hyacinth) Extract",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Chamomilla Recutita (Matricaria) Flower/Leaf Extract",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Borago Officinalis Extract",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Centaurea Cyanus Flower Extract",0.5,0.5
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Butylene Glycol",10,10
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","1,2-Hexanediol",2,2
+MAB-0014,"Blue Complex H","교정가능",99.5,100,37,"Excel 원본","Ethylhexylglycerin",0.1,0.1
+MAL-0022,"락토바실러스발효물-HD","교정가능",3,100,28,"Excel 원본 (to 100, 3)","Lactobacillus Ferment Filtrate",97,97
+MAL-0022,"락토바실러스발효물-HD","교정가능",3,100,28,"Excel 원본 (to 100, 3)","1,2-Hexanediol",3,3
+MSM-0004,"Micolin S-430","교정가능",100.5,100,72,"Excel 원본 (30, 69.5, 0.5)","Sodium Lauryl Sulfate",30,30
+MSM-0004,"Micolin S-430","교정가능",100.5,100,72,"Excel 원본 (30, 69.5, 0.5)","Water",69.5,69.5
+MSM-0004,"Micolin S-430","교정가능",100.5,100,72,"Excel 원본 (30, 69.5, 0.5)","Phenoxyethanol",0.5,0.5
+MSM-0036,"Mirataine BB/FLA","교정가능",0,100,11,"Excel 원본 (69~71, 29~31 → 중앙값)","Water",70,70
+MSM-0036,"Mirataine BB/FLA","교정가능",0,100,11,"Excel 원본 (69~71, 29~31 → 중앙값)","Coco-Betaine",30,30
+MXM-0003,"Mihapol PQ11-20","교정가능 (범위 중앙값, 합=100.5)",100.5,100.5,1,"Excel 원본 (19~21, 79~81, 0.4~0.6 → 중앙값)","Polyquaternium-11",20,20
+MXM-0003,"Mihapol PQ11-20","교정가능 (범위 중앙값, 합=100.5)",100.5,100.5,1,"Excel 원본 (19~21, 79~81, 0.4~0.6 → 중앙값)","Water",80,80
+MXM-0003,"Mihapol PQ11-20","교정가능 (범위 중앙값, 합=100.5)",100.5,100.5,1,"Excel 원본 (19~21, 79~81, 0.4~0.6 → 중앙값)","Phenoxyethanol",0.5,0.5
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","Water",96,96
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","Butylene Glycol",3,3
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","1,2-Hexanediol",0.25,0.25
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","Tremella Fuciformis Polysaccharide",0.5,0.5
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","Caprylyl Glycol",0.25,0.25
+MAP-0030,"Phyto Aqua HA-05","교정가능",99.75,100.25,4,"Excel 원본 (±범위 기준값)","Tropolone",0.25,0.25
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","Water",48,48
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","Octadecane",30,30
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","Lactic Acid/Glycolic Acid Copolymer",20,20
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","1,2-Hexanediol",2,2
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","Caprylyl Glycol",0.1,0.1
+MXB-0006,"BioGenic PCM CSS(28) 50T-XHO","교정가능 (범위 중앙값, 합≈100.2)",100.2,100.19999999999999,1,"Excel 원본 (범위 중앙값)","Xanthan Gum",0.1,0.1
+MPK-0001,"Kathon CG","교정불가 — 별도 자료 필요",0,0,18,"없음 (성분비자료: X)","Methylchloroisothiazolinone",0,0
+MPK-0001,"Kathon CG","교정불가 — 별도 자료 필요",0,0,18,"없음 (성분비자료: X)","Methylisothiazolinone",0,0
+MVC-0010,"Esaflor EC3","교정불가 — 공급사 성분비 자료 필요",0,0,84,"없음 (성분비자료: O, 별도문서)","Guar Hydroxypropyltrimonium Chloride",0,0
+MVC-0010,"Esaflor EC3","교정불가 — 공급사 성분비 자료 필요",0,0,84,"없음 (성분비자료: O, 별도문서)","Water",0,0
+MSE-0025,"Eumulgin HPS","교정불가 — 공급사 성분비 자료 필요",0,0,8,"없음 (성분비자료: O, 별도문서)","Coceth-7",0,0
+MSE-0025,"Eumulgin HPS","교정불가 — 공급사 성분비 자료 필요",0,0,8,"없음 (성분비자료: O, 별도문서)","PPG-1-PEG-9 Lauryl Glycol Ether",0,0
+MSE-0025,"Eumulgin HPS","교정불가 — 공급사 성분비 자료 필요",0,0,8,"없음 (성분비자료: O, 별도문서)","PEG-40 Hydrogenated Castor Oil",0,0
+MOF-0006,"Florasun-90","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Helianthus Annuus (Sunflower) Seed Oil",0,0
+MOF-0006,"Florasun-90","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Tocopherol",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Retinal",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Lecithin",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Caprylic/Capric Triglyceride",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Ascorbic Acid",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Glycerin",0,0
+MAN-0011,"Nanoactive RAL","교정불가 — 공급사 성분비 자료 필요",0,0,14,"없음 (성분비자료: O, 별도문서)","Water",0,0
+MVB-0003,"Bentone Gel VS5PC-V","교정불가 — 공급사 성분비 자료 필요",0,0,2,"없음 (성분비자료: O, 별도문서)","Cyclopentasiloxane",0,0
+MVB-0003,"Bentone Gel VS5PC-V","교정불가 — 공급사 성분비 자료 필요",0,0,2,"없음 (성분비자료: O, 별도문서)","Disteardimonium Hectorite",0,0
+MVB-0003,"Bentone Gel VS5PC-V","교정불가 — 공급사 성분비 자료 필요",0,0,2,"없음 (성분비자료: O, 별도문서)","Propylene Carbonate",0,0
+MVA-0007,"Adekanol GT-730","교정불가 — 공급사 성분비 자료 필요",0,0,4,"없음 (성분비자료: O, 별도문서)","PEG-240/HDI Copolymer Bis-Decyltetradeceth-20 Ether",0,0
+MVA-0007,"Adekanol GT-730","교정불가 — 공급사 성분비 자료 필요",0,0,4,"없음 (성분비자료: O, 별도문서)","Butylene Glycol",0,0
+MVA-0007,"Adekanol GT-730","교정불가 — 공급사 성분비 자료 필요",0,0,4,"없음 (성분비자료: O, 별도문서)","Water",0,0
+MDS-0012,"Silight 10M DS","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Silica",0,0
+MDS-0012,"Silight 10M DS","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Mineral Oil",0,0
+MDS-0012,"Silight 10M DS","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Dimethicone",0,0
+MPS-0001,"Spectrastat","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Caprylhydroxamic Acid",0,0
+MPS-0001,"Spectrastat","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Caprylyl Glycol",0,0
+MPS-0001,"Spectrastat","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Glycerin",0,0
+MAA-0016,"Anti-Shadow Complex","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Chlorella Vulgaris Extract",0,0
+MAA-0016,"Anti-Shadow Complex","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Paeonia Suffruticosa Root Extract",0,0
+MAA-0016,"Anti-Shadow Complex","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Allium Sativum (Garlic) Bulb Extract",0,0
+MAA-0016,"Anti-Shadow Complex","교정불가 — 별도 자료 필요",0,0,1,"없음 (성분비자료: X)","Disodium Adenosine Triphosphate",0,0

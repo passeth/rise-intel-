@@ -63,6 +63,9 @@ export interface LabProduct {
   semi_product_code: string | null
   p_product_code: string | null
   cosmetic_type: string | null
+  msds_type?: string | null
+  msds_alcohol_content?: number | null
+  msds_flammability?: string | null
   dosage: string | null
   usage_precautions: string | null
   remarks: string | null
@@ -80,9 +83,9 @@ export async function fetchProductWithBom(productCode: string) {
 
   if (productErr) {
     if (productErr.code === 'PGRST116') {
-      return { product: null, bomItems: [], error: '품목을 찾을 수 없습니다' }
+      return { product: null, bomItems: [] as NormalizedBomItem[], error: null, productNotFound: true }
     }
-    return { product: null, bomItems: [], error: productErr.message }
+    return { product: null, bomItems: [] as NormalizedBomItem[], error: productErr.message, productNotFound: false }
   }
 
   let bomItems: NormalizedBomItem[] = []
@@ -137,5 +140,5 @@ export async function fetchProductWithBom(productCode: string) {
     }
   }
 
-  return { product: product as LabProduct, bomItems, error: null }
+  return { product: product as LabProduct, bomItems, error: null, productNotFound: false }
 }

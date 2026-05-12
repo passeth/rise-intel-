@@ -18,6 +18,7 @@ import {
   FileBox,
   AlertTriangle,
   ClipboardList,
+  HardDrive,
   Search,
   Loader2,
   ChevronLeft,
@@ -50,6 +51,7 @@ const docLinks: DocLink[] = [
   { href: 'raw-materials/coa', label: '원료 COA', icon: FileBox, group: '기타' },
   { href: 'msds', label: 'MSDS', icon: AlertTriangle, group: '기타' },
   { href: 'manufacturing-process', label: '제조공정기록서', icon: ClipboardList, group: '기타' },
+  { href: 'subsidiary-materials', label: '부자재 디자인', icon: HardDrive, group: '기타' },
 ]
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {

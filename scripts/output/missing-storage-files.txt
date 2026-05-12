@@ -1,0 +1,21 @@
+=== documents 버킷 (누락: 6개) ===
+
+-- weighing-instructions (5개) --
+weighing-instructions/weighing_B6053.pdf
+weighing-instructions/weighing_B6054.pdf
+weighing-instructions/weighing_M6036.pdf
+weighing-instructions/weighing_M6037.pdf
+weighing-instructions/weighing_S6056.pdf
+
+-- products (1개) --
+products 폴더 내 개별 파일 1개 (제품 폴더 수는 동일 - 1,554개)
+
+=== ingredients-documents 버킷 (누락: 35개) ===
+
+Commerce: 9,640 / Intel: 9,605
+35개 파일 실패 (0.4%)
+
+=== 복구 방법 ===
+npx tsx scripts/migrate-storage-remaining.ts  (documents 버킷 - 재실행)
+npx tsx scripts/migrate-storage-ingredients.ts (ingredients-documents 버킷 - 재실행)
+두 스크립트 모두 upsert 모드라 재실행 안전

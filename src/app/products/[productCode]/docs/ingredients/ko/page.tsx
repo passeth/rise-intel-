@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { fetchProductWithBom, type LabProduct, type NormalizedBomItem } from "../../_lib/utils";
+import { BomQuickLink } from "../../_components/bom-quick-link";
 import { Loader2, AlertCircle, Printer } from "lucide-react";
 
 interface KoreanIngredientRow { no: number; code: string; inciNameKr: string; wtPercent: number; }
@@ -14,12 +15,15 @@ export default function KoreanIngredientsPage() {
   const [bomItems, setBomItems] = useState<NormalizedBomItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [productNotFound, setProductNotFound] = useState(false);
 
   const fetchData = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setProductNotFound(false);
     try {
       const result = await fetchProductWithBom(decodedProductCode);
-      if (result.error) { setError(result.error); } else { setProduct(result.product); setBomItems(result.bomItems); }
+      if (result.productNotFound) { setProductNotFound(true); }
+      else if (result.error) { setError(result.error); }
+      else { setProduct(result.product); setBomItems(result.bomItems); }
     } catch (e) { setError(e instanceof Error ? e.message : "데이터 로드 실패"); }
     finally { setLoading(false); }
   }, [decodedProductCode]);
@@ -40,6 +44,7 @@ export default function KoreanIngredientsPage() {
   const handlePrint = () => window.print();
 
   if (loading) return <div className="flex items-center justify-center py-24"><Loader2 size={22} className="animate-spin text-amber-500" /></div>;
+  if (productNotFound) return <BomQuickLink productCode={decodedProductCode} onLinked={fetchData} />;
   if (error || !product) return <div className="bg-white rounded-xl border border-slate-200 p-12 text-center"><AlertCircle size={48} className="mx-auto text-red-400 mb-3" /><p className="text-red-500 text-sm">{error || "품목을 찾을 수 없습니다"}</p></div>;
 
   return (

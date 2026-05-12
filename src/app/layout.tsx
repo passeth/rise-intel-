@@ -5,6 +5,7 @@ import { UserProvider } from '@/providers/user-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { getServerUser } from '@/lib/supabase/server'
 import { MainLayout } from '@/components/layout/main-layout'
+import { DevTools } from '@/components/dev-tools'
 
 export const metadata: Metadata = {
   title: 'RISE INTEL',
@@ -27,6 +28,7 @@ export default async function RootLayout({
               {children}
             </MainLayout>
             <Toaster />
+            <DevTools />
           </UserProvider>
         </QueryProvider>
       </body>

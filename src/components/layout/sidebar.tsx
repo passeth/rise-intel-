@@ -45,6 +45,7 @@ const navItemsV1: NavItem[] = [
     children: [
       { title: '제품 목록', href: '/products' },
       { title: '제품 생성/수정', href: '/products/new' },
+      { title: 'BOM 업로드', href: '/products/bom' },
     ],
   },
   {
@@ -96,6 +97,7 @@ const navItemsV2: NavItem[] = [
       { title: '제품 관리', href: '/v2/pif/manage' },
       { title: 'CPNP 서류 생성', href: '/v2/pif/cpnp' },
       { title: '업체 서류 현황', href: '/v2/pif/documents/status' },
+      { title: 'BOM 업로드', href: '/products/bom' },
     ],
   },
   {
