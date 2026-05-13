@@ -1567,7 +1567,7 @@ function SubOnePercentOrderEditor({
         <div className="px-3 py-8 text-center text-xs text-[#999999]">1% 미만 INCI 데이터가 없습니다.</div>
       ) : (
         <div className="space-y-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-10">
           {orderedRows.map((row, index) => (
             <div
               key={row.id ?? row.inciName}
@@ -1579,19 +1579,16 @@ function SubOnePercentOrderEditor({
                 setDragIndex(null)
               }}
               onDragEnd={() => setDragIndex(null)}
-              className={`min-h-[104px] cursor-grab rounded-md border px-3 py-2 text-xs active:cursor-grabbing ${
+              className={`min-h-[58px] cursor-grab rounded-md border px-2 py-1.5 text-[11px] active:cursor-grabbing ${
                 dragIndex === index ? 'border-amber-400 bg-amber-100' : 'border-[#E5E5E5] bg-white hover:bg-amber-50'
               }`}
             >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="font-mono text-[11px] font-semibold text-amber-700">#{index + 1}</div>
-                <div className="font-mono text-[11px] text-amber-700">{row.wtPercent.toFixed(5)}%</div>
+              <div className="mb-1 flex items-center justify-between gap-1">
+                <div className="font-mono text-[10px] font-semibold text-amber-700">#{index + 1}</div>
+                <div className="font-mono text-[10px] text-amber-700">{row.wtPercent.toFixed(4)}%</div>
               </div>
-              <div className="line-clamp-2 font-medium leading-4 text-[#1A1A1A]" title={row.inciName}>
-                {row.inciName}
-              </div>
-              <div className="mt-2 truncate text-[10px] text-[#999999]" title={row.casNo}>
-                CAS: {row.casNo}
+              <div className="line-clamp-2 font-medium leading-3.5 text-[#1A1A1A]" title={row.inciNameKo || row.inciName}>
+                {row.inciNameKo || row.inciName}
               </div>
             </div>
           ))}
