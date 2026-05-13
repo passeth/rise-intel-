@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Popover,
   PopoverContent,
@@ -48,7 +49,9 @@ import {
   fetchMsdsFlammabilitySettings,
   reevaluateFlammabilityByProductCodes,
   updateMsdsFlammabilitySettings,
+  updateManageProductStatus,
   fetchManageProducts,
+  type PifStatus,
   type ManageSortDirection,
   type ManageSortField,
 } from './actions'
@@ -99,9 +102,11 @@ function renderDash(value: string | null): string {
 
 export default function V2PifManagePage() {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [status, setStatus] = useState<PifStatus>('active')
   const [flammabilityFilter, setFlammabilityFilter] = useState<'all' | 'non_flammable' | 'caution' | 'flammable'>('all')
   const [sortField, setSortField] = useState<ManageSortField>('management_code')
   const [sortDirection, setSortDirection] = useState<ManageSortDirection>('asc')
@@ -122,9 +127,10 @@ export default function V2PifManagePage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['pif-manage-products', search, page, flammabilityFilter, sortField, sortDirection],
+    queryKey: ['pif-manage-products', search, page, status, flammabilityFilter, sortField, sortDirection],
     queryFn: () =>
       fetchManageProducts(search, page, PAGE_SIZE, {
+        status,
         flammabilityFilter,
         sortField,
         sortDirection,
@@ -148,9 +154,31 @@ export default function V2PifManagePage() {
       setIsCosmeticTypePopoverOpen(false)
       setCosmeticTypeInput('')
       setSelectedProducts(new Set())
+      setLastSelectedIndex(null)
     },
     onError: (error: Error) => {
       toast.error(error.message || '일괄 수정에 실패했습니다')
+    },
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: updateManageProductStatus,
+    onSuccess: (result, variables) => {
+      if (!result.success) {
+        toast.error(result.error ?? '상태 변경에 실패했습니다')
+        return
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['pif-manage-products'] })
+      queryClient.invalidateQueries({ queryKey: ['pif-products'] })
+      toast.success(
+        `${result.updatedCount}개 제품을 ${variables.status === 'active' ? 'Active' : 'Inactive'} 상태로 변경했습니다`
+      )
+      setSelectedProducts(new Set())
+      setLastSelectedIndex(null)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '상태 변경에 실패했습니다')
     },
   })
 
@@ -209,8 +237,13 @@ export default function V2PifManagePage() {
     setFlammableThresholdInput(String(thresholdSettings.flammable_threshold))
   }, [thresholdSettings])
 
+  useEffect(() => {
+    setLastSelectedIndex(null)
+  }, [page, status, search, flammabilityFilter, sortField, sortDirection])
+
   const products = data?.products ?? []
   const totalCount = data?.total ?? 0
+  const statusCounts = data?.statusCounts ?? { active: 0, inactive: 0 }
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasPrev = page > 1
   const hasNext = page < totalPages
@@ -260,10 +293,19 @@ export default function V2PifManagePage() {
     setSearch(searchInput)
     setPage(1)
     setSelectedProducts(new Set())
+    setLastSelectedIndex(null)
+  }
+
+  const handleStatusTabChange = (value: string) => {
+    setStatus(value === 'inactive' ? 'inactive' : 'active')
+    setPage(1)
+    setSelectedProducts(new Set())
+    setLastSelectedIndex(null)
   }
 
   const handleToggleSort = (field: ManageSortField) => {
     setPage(1)
+    setSelectedProducts(new Set())
     if (sortField === field) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
       return
@@ -297,9 +339,10 @@ export default function V2PifManagePage() {
     }
 
     setSelectedProducts(next)
+    setLastSelectedIndex(null)
   }
 
-  const handleToggleOne = (productCode: string, checked: boolean) => {
+  const handleToggleOne = (productCode: string, checked: boolean, index: number) => {
     const next = new Set(selectedProducts)
 
     if (checked) {
@@ -309,6 +352,47 @@ export default function V2PifManagePage() {
     }
 
     setSelectedProducts(next)
+    setLastSelectedIndex(index)
+  }
+
+  const handleProductSelectionClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    productCode: string,
+    index: number
+  ) => {
+    if (!event.shiftKey || lastSelectedIndex === null) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const shouldSelect = !selectedProducts.has(productCode)
+    const [from, to] = [lastSelectedIndex, index].sort((a, b) => a - b)
+    const next = new Set(selectedProducts)
+
+    for (const product of products.slice(from, to + 1)) {
+      if (shouldSelect) {
+        next.add(product.product_code)
+      } else {
+        next.delete(product.product_code)
+      }
+    }
+
+    setSelectedProducts(next)
+    setLastSelectedIndex(index)
+  }
+
+  const handleBulkStatusUpdate = (targetStatus: PifStatus) => {
+    if (selectedProducts.size === 0) {
+      toast.error('선택된 제품이 없습니다')
+      return
+    }
+
+    statusMutation.mutate({
+      productCodes: Array.from(selectedProducts),
+      status: targetStatus,
+    })
   }
 
   const handleCosmeticTypeBulkUpdate = () => {
@@ -523,6 +607,8 @@ export default function V2PifManagePage() {
             onValueChange={(value) => {
               setFlammabilityFilter(value as 'all' | 'non_flammable' | 'caution' | 'flammable')
               setPage(1)
+              setSelectedProducts(new Set())
+              setLastSelectedIndex(null)
             }}
           >
             <SelectTrigger className="h-10 text-xs">
@@ -613,6 +699,43 @@ export default function V2PifManagePage() {
         </p>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Tabs value={status} onValueChange={handleStatusTabChange}>
+          <TabsList className="border border-[#E5E5E5] bg-white">
+            <TabsTrigger value="active" className="text-xs">
+              Active ({statusCounts.active.toLocaleString()})
+            </TabsTrigger>
+            <TabsTrigger value="inactive" className="text-xs">
+              Inactive ({statusCounts.inactive.toLocaleString()})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#666666]">
+            {selectedCount.toLocaleString()}개 선택
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleBulkStatusUpdate('active')}
+            disabled={selectedCount === 0 || statusMutation.isPending}
+            className="h-8 text-xs"
+          >
+            선택 제품 Active 처리
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleBulkStatusUpdate('inactive')}
+            disabled={selectedCount === 0 || statusMutation.isPending}
+            className="h-8 text-xs"
+          >
+            선택 제품 Inactive 처리
+          </Button>
+        </div>
+      </div>
+
       <div className="border border-[#E5E5E5] bg-white shadow-sm">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -696,7 +819,7 @@ export default function V2PifManagePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products.map((product) => {
+                  {products.map((product, index) => {
                     const checked = selectedProducts.has(product.product_code)
 
                     return (
@@ -708,7 +831,10 @@ export default function V2PifManagePage() {
                           <Checkbox
                             checked={checked}
                             onCheckedChange={(value) =>
-                              handleToggleOne(product.product_code, value === true)
+                              handleToggleOne(product.product_code, value === true, index)
+                            }
+                            onClick={(event) =>
+                              handleProductSelectionClick(event, product.product_code, index)
                             }
                             aria-label={`${product.product_code} 선택`}
                             className="mx-auto"
@@ -1012,22 +1138,23 @@ export default function V2PifManagePage() {
               )}
             </Button>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    size="sm"
-                    disabled
-                    className="h-8 cursor-not-allowed bg-white text-[#1A1A1A] opacity-50"
-                  >
-                    활성/비활성 전환
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={8}>
-                DB 컬럼 추가 후 활성화
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              size="sm"
+              className="h-8 bg-white text-[#1A1A1A] hover:bg-[#F1F1F1]"
+              onClick={() => handleBulkStatusUpdate('active')}
+              disabled={statusMutation.isPending}
+            >
+              Active 처리
+            </Button>
+
+            <Button
+              size="sm"
+              className="h-8 bg-white text-[#1A1A1A] hover:bg-[#F1F1F1]"
+              onClick={() => handleBulkStatusUpdate('inactive')}
+              disabled={statusMutation.isPending}
+            >
+              Inactive 처리
+            </Button>
 
             <Tooltip>
               <TooltipTrigger asChild>

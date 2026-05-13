@@ -10,6 +10,8 @@ import {
   parseNumericValue,
 } from '@/lib/msds/flammability'
 
+export type PifStatus = 'active' | 'inactive'
+
 export interface ManageProduct {
   product_code: string
   management_code: string | null
@@ -23,11 +25,13 @@ export interface ManageProduct {
   msds_type: string | null
   created_date: string | null
   author: string | null
+  pif_status: PifStatus
 }
 
 export interface ManageProductListResult {
   products: ManageProduct[]
   total: number
+  statusCounts: Record<PifStatus, number>
 }
 
 export type ManageSortField =
@@ -42,6 +46,7 @@ export type ManageSortField =
 export type ManageSortDirection = 'asc' | 'desc'
 
 export interface ManageListOptions {
+  status?: PifStatus
   flammabilityFilter?: 'all' | 'non_flammable' | 'caution' | 'flammable'
   sortField?: ManageSortField
   sortDirection?: ManageSortDirection
@@ -60,9 +65,68 @@ const SELECT_COLUMNS = [
   'msds_type',
   'created_date',
   'author',
+  'pif_status',
+].join(', ')
+
+const SELECT_COLUMNS_LEGACY = [
+  'product_code',
+  'management_code',
+  'korean_name',
+  'english_name',
+  'semi_product_code',
+  'p_product_code',
+  'cosmetic_type',
+  'msds_alcohol_content',
+  'msds_flammability',
+  'msds_type',
+  'created_date',
+  'author',
 ].join(', ')
 
 const BULK_EDITABLE_FIELDS = new Set(['cosmetic_type', 'msds_type', 'msds_flammability'])
+
+function normalizeStatus(value: unknown): PifStatus {
+  return value === 'inactive' ? 'inactive' : 'active'
+}
+
+function mapManageProduct(row: Record<string, unknown>): ManageProduct {
+  return {
+    product_code: String(row.product_code),
+    management_code: row.management_code as string | null,
+    korean_name: row.korean_name as string | null,
+    english_name: row.english_name as string | null,
+    semi_product_code: row.semi_product_code as string | null,
+    p_product_code: row.p_product_code as string | null,
+    cosmetic_type: row.cosmetic_type as string | null,
+    msds_alcohol_content: row.msds_alcohol_content as number | null,
+    msds_flammability: row.msds_flammability as string | null,
+    msds_type: row.msds_type as string | null,
+    created_date: row.created_date as string | null,
+    author: row.author as string | null,
+    pif_status: normalizeStatus(row.pif_status),
+  }
+}
+
+async function fetchManageStatusCounts(): Promise<Record<PifStatus, number>> {
+  const supabase = await createClient()
+  const counts: Record<PifStatus, number> = { active: 0, inactive: 0 }
+
+  const [active, inactive] = await Promise.all([
+    supabase
+      .from('labdoc_products')
+      .select('product_code', { count: 'exact', head: true })
+      .eq('pif_status', 'active'),
+    supabase
+      .from('labdoc_products')
+      .select('product_code', { count: 'exact', head: true })
+      .eq('pif_status', 'inactive'),
+  ])
+
+  if (!active.error) counts.active = active.count ?? 0
+  if (!inactive.error) counts.inactive = inactive.count ?? 0
+
+  return counts
+}
 
 export interface MsdsTypeBulkUpdateItem {
   product_code: string
@@ -145,13 +209,14 @@ export async function fetchManageProducts(
   const from = Math.max(0, page - 1) * pageSize
   const to = from + pageSize - 1
 
-  const buildQuery = (activeOnly: boolean) => {
+  const status = options?.status ?? 'active'
+  const buildQuery = (withStatus: boolean, selectColumns = SELECT_COLUMNS) => {
     let nextQuery = supabase
       .from('labdoc_products')
-      .select(SELECT_COLUMNS, { count: 'exact' })
+      .select(selectColumns, { count: 'exact' })
 
-    if (activeOnly) {
-      nextQuery = nextQuery.eq('pif_status', 'active')
+    if (withStatus) {
+      nextQuery = nextQuery.eq('pif_status', status)
     }
 
     return nextQuery
@@ -173,13 +238,22 @@ export async function fetchManageProducts(
 
   const sortField = options?.sortField ?? 'management_code'
   const sortDirection = options?.sortDirection ?? 'asc'
+  const statusCounts = await fetchManageStatusCounts()
 
   let { data, count, error } = await query
     .order(sortField, { ascending: sortDirection === 'asc', nullsFirst: false })
     .range(from, to)
 
   if (error && error.message.includes('pif_status')) {
-    const fallback = await buildQuery(false)
+    if (status === 'inactive') {
+      return {
+        products: [],
+        total: 0,
+        statusCounts,
+      }
+    }
+
+    const fallback = await buildQuery(false, SELECT_COLUMNS_LEGACY)
       .order(sortField, { ascending: sortDirection === 'asc', nullsFirst: false })
       .range(from, to)
     data = fallback.data
@@ -189,12 +263,48 @@ export async function fetchManageProducts(
 
   if (error) {
     console.error('fetchManageProducts error:', error)
-    return { products: [], total: 0 }
+    return { products: [], total: 0, statusCounts }
   }
 
   return {
-    products: (data ?? []) as unknown as ManageProduct[],
+    products: (data ?? []).map((row) => mapManageProduct(row as unknown as Record<string, unknown>)),
     total: count ?? 0,
+    statusCounts,
+  }
+}
+
+export async function updateManageProductStatus(input: {
+  productCodes: string[]
+  status: PifStatus
+}): Promise<{ success: boolean; error?: string; updatedCount: number }> {
+  const uniqueProductCodes = Array.from(new Set(input.productCodes.filter(Boolean)))
+  if (uniqueProductCodes.length === 0) {
+    return { success: false, error: '선택된 제품이 없습니다', updatedCount: 0 }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('labdoc_products')
+    .update({
+      pif_status: input.status,
+      updated_at: new Date().toISOString(),
+    })
+    .in('product_code', uniqueProductCodes)
+
+  if (error) {
+    console.error('updateManageProductStatus error:', error)
+    return {
+      success: false,
+      error: error.message.includes('pif_status')
+        ? 'DB 마이그레이션(sql/002_pif_status_and_product_functions.sql)이 먼저 필요합니다.'
+        : error.message,
+      updatedCount: 0,
+    }
+  }
+
+  return {
+    success: true,
+    updatedCount: uniqueProductCodes.length,
   }
 }
 
