@@ -642,14 +642,32 @@ export async function updateProductInciItemOrders(input: {
     return { success: false, error: fetchError.message }
   }
 
-  const inciKo = (rows ?? [])
-    .map((row: { inci_name_ko?: string | null; inci_name_en?: string | null }) => row.inci_name_ko || row.inci_name_en)
-    .filter(Boolean)
-    .join(', ')
-  const inciEn = (rows ?? [])
-    .map((row: { inci_name_en?: string | null }) => row.inci_name_en)
-    .filter(Boolean)
-    .join(', ')
+  const buildUniqueDeclaration = <T extends Record<string, string | null | undefined>>(items: T[], pick: (item: T) => string | null | undefined) => {
+    const seen = new Set<string>()
+    const values: string[] = []
+
+    for (const item of items) {
+      const value = pick(item)?.trim()
+      if (!value) continue
+
+      const key = value.replace(/\s+/g, ' ').toLocaleLowerCase('en-US')
+      if (seen.has(key)) continue
+
+      seen.add(key)
+      values.push(value)
+    }
+
+    return values.join(', ')
+  }
+
+  const inciKo = buildUniqueDeclaration(
+    rows ?? [],
+    (row: { inci_name_ko?: string | null; inci_name_en?: string | null }) => row.inci_name_ko || row.inci_name_en
+  )
+  const inciEn = buildUniqueDeclaration(
+    rows ?? [],
+    (row: { inci_name_en?: string | null }) => row.inci_name_en
+  )
 
   const { error: inciError } = await supabase
     .from('labdoc_product_inci')
