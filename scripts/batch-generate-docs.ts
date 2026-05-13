@@ -109,7 +109,7 @@ async function fetchProductWithBom(productCode: string) {
   if (semiCode) {
     const { data: bomData, error: bomErr } = await supabase
       .from('bom_master').select('materialcode, materialname, usemount')
-      .eq('prdcode', semiCode).order('usemount', { ascending: false })
+      .eq('prdcode', semiCode).eq('품목구분', '[원재료]').order('usemount', { ascending: false })
 
     if (!bomErr && bomData && bomData.length > 0) {
       const normalizedMap = new Map<string, { materialname: string; totalUsemount: number }>()

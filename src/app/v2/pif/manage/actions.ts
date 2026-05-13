@@ -355,6 +355,7 @@ export async function reevaluateFlammabilityByProductCodes(
       .from('bom_master')
       .select('prdcode, materialcode, usemount')
       .in('prdcode', semiCodes)
+      .eq('품목구분', '[원재료]')
 
     if (bomError) {
       console.error('reevaluateFlammabilityByProductCodes bom fetch error:', bomError)

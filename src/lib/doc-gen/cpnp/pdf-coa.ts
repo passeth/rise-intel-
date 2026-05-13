@@ -9,6 +9,10 @@ type CoaRow = {
   result: string
 }
 
+type PdfIssueOptions = {
+  issuedAt?: Date
+}
+
 function toText(value: string | null | undefined): string {
   return value?.trim() ?? ''
 }
@@ -26,6 +30,18 @@ function getQcResult(spec: CpnpProductData['qcSpecs'][number]): string {
 }
 
 function getCoaRows(data: CpnpProductData): CoaRow[] {
+  const certificateRows = data.coaCertificate?.results
+    .map((spec) => ({
+      test: toText(spec.test_item),
+      specification: toText(spec.specification),
+      result: toText(spec.result) || toText(spec.judgment) || 'PASSED TO THE TEST',
+    }))
+    .filter((spec) => spec.test) ?? []
+
+  if (certificateRows.length > 0) {
+    return certificateRows
+  }
+
   const englishRows = data.englishSpecs
     .map((spec) => ({
       test: toText(spec.test_item),
@@ -55,17 +71,21 @@ function getCoaRows(data: CpnpProductData): CoaRow[] {
     }))
 }
 
-export async function generateCoaPdf(data: CpnpProductData): Promise<Blob> {
+export async function generateCoaPdf(
+  data: CpnpProductData,
+  options: PdfIssueOptions = {}
+): Promise<Blob> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   await loadKoreanFont(doc)
   doc.setFont('NanumGothic', 'normal')
 
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 14
-  const issueDate = formatIssueDate(new Date())
+  const issueDate = formatIssueDate(options.issuedAt ?? new Date())
   const productName = data.product.english_name || data.product.korean_name || '—'
   const reference = data.product.management_code || '—'
   const coaRows = getCoaRows(data)
+  const approver = toText(data.coaCertificate?.approver)
 
   doc.setFont('NanumGothic', 'bold')
   doc.setFontSize(12)
@@ -155,7 +175,7 @@ export async function generateCoaPdf(data: CpnpProductData): Promise<Blob> {
 
   doc.setFont('NanumGothic', 'normal')
   doc.setFontSize(10)
-  doc.text('Approved By  _______________', pageWidth - margin - 70, footerStartY)
+  doc.text(`Approved By  ${approver || '_______________'}`, pageWidth - margin - 70, footerStartY)
   doc.text('Director R&D Center', pageWidth - margin - 70, footerStartY + 7)
   doc.text('EVAS Cosmetics Co., Ltd.', pageWidth - margin - 70, footerStartY + 14)
 

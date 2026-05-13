@@ -101,6 +101,7 @@ export async function fetchProductWithBom(productCode: string) {
       .from('bom_master')
       .select('materialcode, materialname, usemount')
       .eq('prdcode', product.semi_product_code)
+      .eq('품목구분', '[원재료]')
       .order('usemount', { ascending: false })
 
     if (!bomErr && bomData && bomData.length > 0) {

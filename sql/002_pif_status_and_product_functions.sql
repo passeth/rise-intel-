@@ -59,6 +59,7 @@ WITH normalized_bom AS (
   FROM labdoc_products p
   JOIN bom_master b ON b.prdcode = p.semi_product_code
   WHERE b.materialcode IS NOT NULL
+    AND b."품목구분" = '[원재료]'
 ), component_defaults AS (
   SELECT
     nb.product_code,
@@ -91,6 +92,7 @@ WITH normalized_bom AS (
   FROM labdoc_products p
   JOIN bom_master b ON b.prdcode = p.semi_product_code
   WHERE b.materialcode IS NOT NULL
+    AND b."품목구분" = '[원재료]'
 ), ingredient_defaults AS (
   SELECT
     nb.product_code,

@@ -135,6 +135,7 @@ async function fetchBomMap(semiProductCodes) {
         .from('bom_master')
         .select('prdcode, materialcode, materialname, usemount')
         .in('prdcode', batch)
+        .eq('품목구분', '[원재료]')
         .order('prdcode', { ascending: true })
         .order('usemount', { ascending: false })
         .range(from, from + PAGE_SIZE - 1)
@@ -331,8 +332,19 @@ async function upsertInciRows(rows) {
   }
 }
 
-async function upsertItemRows(itemRowsByProduct) {
+async function replaceItemRows(itemRowsByProduct) {
+  const productCodes = Array.from(itemRowsByProduct.keys())
   const rows = Array.from(itemRowsByProduct.values()).flat()
+
+  for (let i = 0; i < productCodes.length; i += BATCH_SIZE) {
+    const batch = productCodes.slice(i, i + BATCH_SIZE)
+    const { error } = await supabase
+      .from('labdoc_product_inci_items')
+      .delete()
+      .in('product_code', batch)
+    if (error) throw new Error(`Failed to clear existing INCI item rows: ${error.message}`)
+  }
+
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
     const { error } = await supabase
@@ -424,7 +436,7 @@ async function main() {
   }
 
   if (upserts.length > 0) await upsertInciRows(upserts)
-  if (hasItemTable && itemRowsByProduct.size > 0) await upsertItemRows(itemRowsByProduct)
+  if (hasItemTable && itemRowsByProduct.size > 0) await replaceItemRows(itemRowsByProduct)
 
   console.log('\n✅ Migration complete.')
 }

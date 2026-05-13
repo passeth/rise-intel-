@@ -15,6 +15,7 @@ WITH normalized_bom AS (
   FROM bom_master b
   WHERE b.materialcode IS NOT NULL
     AND btrim(b.materialcode) <> ''
+    AND b."품목구분" = '[원재료]'
   GROUP BY 1
 ), missing AS (
   SELECT

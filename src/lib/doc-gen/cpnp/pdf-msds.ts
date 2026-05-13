@@ -16,6 +16,10 @@ type IngredientRow = {
   functionName: string
 }
 
+type PdfIssueOptions = {
+  issuedAt?: Date
+}
+
 type MsdsContext = {
   alcoholPercent: number
   riskLevel: AlcoholRiskLevel
@@ -338,8 +342,8 @@ function renderPage4(state: SectionRenderer, context: MsdsContext): void {
   drawWrappedLine(state, getTransportText(context.riskLevel))
   state.y += 2
 
-  drawSectionTitle(state, '16. REGULATORY INFORMATION')
-  drawWrappedLine(state, 'This product complies with all applicable cosmetic regulations in the country of sale.')
+  drawSectionTitle(state, '16. OTHER INFORMATION')
+  drawWrappedLine(state, 'The product is for cosmetic use only. The information contained herein is based on data considered accurate at the date of issue and is provided for safe handling, storage, and transport guidance.')
 }
 
 function drawApprovalFooter(doc: jsPDF, pageWidth: number, margin: number): void {
@@ -351,14 +355,17 @@ function drawApprovalFooter(doc: jsPDF, pageWidth: number, margin: number): void
   doc.text('EVAS Cosmetics Co., Ltd.', pageWidth - margin - 72, footerY + 14)
 }
 
-export async function generateMsdsPdf(data: CpnpProductData): Promise<Blob> {
+export async function generateMsdsPdf(
+  data: CpnpProductData,
+  options: PdfIssueOptions = {}
+): Promise<Blob> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   await loadKoreanFont(doc)
   doc.setFont('NanumGothic', 'normal')
 
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 14
-  const dateText = formatDate(new Date())
+  const dateText = formatDate(options.issuedAt ?? new Date())
   const context = calculateAlcoholContext(data)
 
   let state: SectionRenderer = {

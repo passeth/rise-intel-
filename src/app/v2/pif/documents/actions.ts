@@ -176,6 +176,7 @@ async function buildSupplierDocumentStatusItems(
       .from('bom_master')
       .select('prdcode, materialcode, materialname')
       .in('prdcode', semiProductCodes)
+      .eq('품목구분', '[원재료]')
 
     if (bomError) {
       console.error('fetchSupplierDocumentStatus bom error:', bomError)

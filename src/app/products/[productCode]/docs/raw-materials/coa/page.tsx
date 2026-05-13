@@ -24,7 +24,7 @@ export default function RawMaterialsCoaPage() {
       if (productErr) { if (productErr.code === "PGRST116") setError("품목을 찾을 수 없습니다"); else throw productErr; setLoading(false); return; }
       setProduct(productData as LabProduct);
       if (!productData.semi_product_code) { setIngredients([]); setLoading(false); return; }
-      const { data: bomData, error: bomErr } = await supabase.from("bom_master").select("materialcode, materialname").eq("prdcode", productData.semi_product_code);
+      const { data: bomData, error: bomErr } = await supabase.from("bom_master").select("materialcode, materialname").eq("prdcode", productData.semi_product_code).eq("품목구분", "[원재료]");
       if (bomErr || !bomData || bomData.length === 0) { setIngredients([]); setLoading(false); return; }
       const uniqueCodes = new Map<string, string>();
       (bomData as BomRawItem[]).forEach((item) => { if (!item.materialcode) return; const baseCode = normalizeIngredientCode(item.materialcode); if (!uniqueCodes.has(baseCode)) uniqueCodes.set(baseCode, item.materialname ?? baseCode); });

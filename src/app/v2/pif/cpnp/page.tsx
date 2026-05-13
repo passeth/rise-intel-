@@ -270,6 +270,7 @@ export default function V2PifCpnpPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<Set<CpnpDocumentType>>(
     () => new Set(autoDocumentTypes)
   )
+  const [reuseIssuedDocuments, setReuseIssuedDocuments] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -427,6 +428,7 @@ export default function V2PifCpnpPage() {
     mutation.mutate({
       productCodes: Array.from(selectedProducts),
       documents: Array.from(selectedDocuments),
+      reuseIssuedDocuments,
     })
   }
 
@@ -457,6 +459,11 @@ export default function V2PifCpnpPage() {
         <span className="text-xs font-medium text-[#1A1A1A]">
           {documentTitle}
         </span>
+        {documentResult.reused && (
+          <Badge className="h-5 bg-blue-100 px-2 text-[10px] text-blue-700 hover:bg-blue-100">
+            기존 발급본
+          </Badge>
+        )}
 
         {documentResult.url ? (
           <div className="ml-auto flex items-center gap-1.5">
@@ -536,7 +543,7 @@ export default function V2PifCpnpPage() {
   const renderHistoryStatus = (status: string | null) => {
     const normalized = status?.toLowerCase() ?? 'unknown'
 
-    if (normalized === 'generated' || normalized === 'success') {
+    if (normalized === 'generated' || normalized === 'issued' || normalized === 'success') {
       return (
         <Badge className="h-5 bg-green-100 px-2 text-[10px] text-green-700 hover:bg-green-100">
           성공
@@ -643,6 +650,7 @@ export default function V2PifCpnpPage() {
             </Badge>
             <p className="text-xs text-[#666666]">
               총 {mutation.data.results.length}개 제품 처리, 성공 파일 {successfulUrls.length}건
+              {mutation.data.package?.packageNo ? ` · 패키지 ${mutation.data.package.packageNo}` : ''}
             </p>
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -860,6 +868,21 @@ export default function V2PifCpnpPage() {
                 </label>
               )
             })}
+
+
+            <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2">
+              <label className="flex cursor-pointer items-start gap-2">
+                <Checkbox
+                  checked={reuseIssuedDocuments}
+                  onCheckedChange={(value) => setReuseIssuedDocuments(value === true)}
+                  className="mt-0.5 border-blue-300"
+                  aria-label="COA/MSDS 최신 발급본 재사용"
+                />
+                <span className="text-[11px] leading-5 text-blue-800">
+                  COA/MSDS는 동일한 원천 데이터의 최신 발급본이 있으면 재사용하고, 없거나 데이터가 바뀌면 새로 발급합니다.
+                </span>
+              </label>
+            </div>
           </div>
         </aside>
       </div>
@@ -937,6 +960,8 @@ export default function V2PifCpnpPage() {
                   <TableHead className="text-xs font-semibold text-[#666666]">제품코드</TableHead>
                   <TableHead className="text-xs font-semibold text-[#666666]">서류유형</TableHead>
                   <TableHead className="text-xs font-semibold text-[#666666]">상태</TableHead>
+                  <TableHead className="text-xs font-semibold text-[#666666]">발급</TableHead>
+                  <TableHead className="text-xs font-semibold text-[#666666]">패키지</TableHead>
                   <TableHead className="text-xs font-semibold text-[#666666]">다운로드</TableHead>
                 </TableRow>
               </TableHeader>
@@ -961,6 +986,20 @@ export default function V2PifCpnpPage() {
                         {documentTypeInfo?.label ?? historyItem.document_type}
                       </TableCell>
                       <TableCell className="text-xs">{renderHistoryStatus(historyItem.status)}</TableCell>
+                      <TableCell className="text-xs">
+                        {historyItem.reused ? (
+                          <Badge className="h-5 bg-blue-100 px-2 text-[10px] text-blue-700 hover:bg-blue-100">
+                            재사용
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="h-5 px-2 text-[10px] text-[#666666]">
+                            신규
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-[11px] text-[#666666]">
+                        {historyItem.package_no ?? '-'}
+                      </TableCell>
                       <TableCell className="text-xs">
                         {historyItem.pdf_url ? (
                           <div className="flex items-center gap-1.5">

@@ -4,6 +4,7 @@ export interface BomCsvRow {
   materialcode: string
   materialname: string
   usemount: number
+  itemType: string
 }
 
 // Product mapping extracted from CSV: final product → bulk (semi-product)
@@ -33,6 +34,7 @@ export function parseBomCsv(content: string): { rows: BomCsvRow[]; error?: strin
 
     const clean = (s: string) => s.replace(/"/g, '').replace(/\t/g, '').trim()
 
+    const itemType = clean(parts[1])
     const productName = clean(parts[2])
     const prdcode = clean(parts[7])
     const materialcode = clean(parts[3])
@@ -42,7 +44,7 @@ export function parseBomCsv(content: string): { rows: BomCsvRow[]; error?: strin
 
     if (!prdcode || !materialcode || isNaN(usemount)) continue
 
-    rows.push({ prdcode, productName, materialcode, materialname, usemount })
+    rows.push({ prdcode, productName, materialcode, materialname, usemount, itemType })
   }
 
   return { rows }

@@ -51,7 +51,7 @@ export default function MsdsPage() {
       let computedAlcoholContent = 0;
 
       if (productData.semi_product_code) {
-        const { data: bomData } = await supabase.from("bom_master").select("materialcode, materialname, usemount").eq("prdcode", productData.semi_product_code).order("usemount", { ascending: false });
+        const { data: bomData } = await supabase.from("bom_master").select("materialcode, materialname, usemount").eq("prdcode", productData.semi_product_code).eq("품목구분", "[원재료]").order("usemount", { ascending: false });
         if (bomData && bomData.length > 0) {
           const normalizedBomRows = (bomData as BomRawItem[])
             .map((item) => ({

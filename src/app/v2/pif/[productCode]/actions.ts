@@ -173,6 +173,7 @@ async function fetchBomWithComponents(
     .from('bom_master')
     .select('materialcode, materialname, usemount')
     .eq('prdcode', semiProductCode)
+    .eq('품목구분', '[원재료]')
     .order('usemount', { ascending: false })
 
   if (bomError || !bomData || bomData.length === 0) {

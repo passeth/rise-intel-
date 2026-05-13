@@ -14,6 +14,8 @@ export type CpnpDocumentType =
 export interface CpnpGenerationRequest {
   productCodes: string[]
   documents: CpnpDocumentType[]
+  /** Reuse the latest issued COA/MSDS when available; otherwise generate a new PDF. */
+  reuseIssuedDocuments?: boolean
 }
 
 // Per-document result
@@ -21,6 +23,8 @@ export interface CpnpDocumentResult {
   type: CpnpDocumentType
   url?: string
   error?: string
+  generationId?: string | null
+  reused?: boolean
 }
 
 // Per-product result
@@ -31,9 +35,16 @@ export interface CpnpProductResult {
 }
 
 // Generation response
+export interface CpnpPackageResult {
+  id: string | null
+  packageNo: string | null
+  documentCount: number
+}
+
 export interface CpnpGenerationResponse {
   status: 'success' | 'partial' | 'error'
   results: CpnpProductResult[]
+  package?: CpnpPackageResult | null
 }
 
 // Product data needed for CPNP generation
@@ -60,6 +71,7 @@ export interface CpnpProductData {
   fragranceAllergens: CpnpFragranceAllergen[]
   ingredientDocs: CpnpIngredientDoc[]
   inci: CpnpInci | null
+  coaCertificate: CpnpCoaCertificate | null
   petCertificate: CpnpPetCertificate | null
   stabilityCertificate: CpnpStabilityCertificate | null
   mltCertificate: CpnpMltCertificate | null
@@ -89,6 +101,7 @@ export interface CpnpQcSpec {
   specification: string | null
   specification_en: string | null
   test_method: string | null
+  result: string | null
   qc_type: string | null
   sequence_no: number | null
 }
@@ -133,6 +146,7 @@ export interface CpnpInci {
 
 // Test certificate base (shared fields from labdoc_test_certificates)
 export interface CpnpTestCertificate {
+  id: string | null
   certificate_no: string | null
   lot_no: string | null
   test_date: string | null
@@ -140,6 +154,17 @@ export interface CpnpTestCertificate {
   overall_judgment: string | null
   approver: string | null
   tester: string | null
+}
+
+// COA (Certificate of Analysis) results
+export interface CpnpCoaResult {
+  test_item: string | null
+  specification: string | null
+  result: string | null
+  judgment: string | null
+}
+export interface CpnpCoaCertificate extends CpnpTestCertificate {
+  results: CpnpCoaResult[]
 }
 
 // PET (Challenge Test) results

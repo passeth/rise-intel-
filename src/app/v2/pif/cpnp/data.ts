@@ -11,6 +11,8 @@ import type {
   CpnpFragranceAllergen,
   CpnpIngredientDoc,
   CpnpInci,
+  CpnpCoaCertificate,
+  CpnpCoaResult,
   CpnpPetCertificate,
   CpnpPetResult,
   CpnpStabilityCertificate,
@@ -86,6 +88,7 @@ async function fetchLatestTestCertificate(
 function parseCertificateBase(
   raw: Record<string, unknown>
 ): {
+  id: string | null
   certificate_no: string | null
   lot_no: string | null
   test_date: string | null
@@ -95,6 +98,7 @@ function parseCertificateBase(
   tester: string | null
 } {
   return {
+    id: asString(raw.id),
     certificate_no: asString(raw.certificate_no),
     lot_no: asString(raw.lot_no),
     test_date: asString(raw.test_date),
@@ -103,6 +107,54 @@ function parseCertificateBase(
     approver: asString(raw.approver),
     tester: asString(raw.tester),
   }
+}
+
+function parseCoaResults(raw: unknown): CpnpCoaResult[] {
+  return asUnknownArray(raw)
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map((item) => ({
+      test_item: asString(item.test_item) ?? asString(item.test) ?? asString(item.item),
+      specification: asString(item.specification) ?? asString(item.spec),
+      result: asString(item.result),
+      judgment: asString(item.judgment),
+    }))
+}
+
+function parseCoaCertificate(raw: Record<string, unknown> | null): CpnpCoaCertificate | null {
+  if (!raw) {
+    return null
+  }
+
+  return {
+    ...parseCertificateBase(raw),
+    results: parseCoaResults(raw.results),
+  }
+}
+
+async function fetchLatestCertificateForTypes(
+  supabase: SupabaseClient,
+  productCode: string,
+  qcTypes: string[]
+): Promise<Record<string, unknown> | null> {
+  if (qcTypes.length === 0) {
+    return null
+  }
+
+  const { data, error } = await supabase
+    .from('labdoc_test_certificates')
+    .select('*')
+    .eq('product_code', productCode)
+    .in('qc_type', qcTypes)
+    .order('test_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data as Record<string, unknown>
 }
 
 function parsePetResults(raw: unknown): CpnpPetResult[] {
@@ -213,6 +265,7 @@ async function fetchBomItems(
     .from('bom_master')
     .select('materialcode, materialname, usemount')
     .eq('prdcode', semiProductCode)
+    .eq('품목구분', '[원재료]')
     .order('usemount', { ascending: false })
 
   if (bomError || !bomData || bomData.length === 0) return []
@@ -344,13 +397,14 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
     fragranceAllergens,
     ingredientDocs,
     inciResult,
+    coaCertificateRaw,
     petCertificateRaw,
     stabilityCertificateRaw,
     mltCertificateRaw,
   ] = await Promise.all([
     supabase
       .from('labdoc_product_qc_specs')
-      .select('test_item, test_item_en, specification, specification_en, test_method, qc_type, sequence_no')
+      .select('test_item, test_item_en, specification, specification_en, test_method, result, qc_type, sequence_no')
       .eq('product_code', productCode)
       .order('sequence_no', { ascending: true }),
     supabase
@@ -367,6 +421,7 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
       .select('inci_ko, inci_en, inci_cpnp')
       .eq('product_code', productCode)
       .maybeSingle(),
+    fetchLatestCertificateForTypes(supabase, productCode, ['영문', '완제품']),
     fetchLatestTestCertificate(supabase, productCode, 'pet'),
     fetchLatestTestCertificate(supabase, productCode, 'stability'),
     fetchLatestTestCertificate(supabase, productCode, 'mlt'),
@@ -378,6 +433,7 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
     specification: row.specification,
     specification_en: row.specification_en,
     test_method: row.test_method,
+    result: (row as { result?: string | null }).result ?? null,
     qc_type: row.qc_type,
     sequence_no: row.sequence_no,
   }))
@@ -405,6 +461,7 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
       }
     : null
 
+  const coaCertificate = parseCoaCertificate(coaCertificateRaw)
   const petCertificate = parsePetCertificate(petCertificateRaw)
   const stabilityCertificate = parseStabilityCertificate(stabilityCertificateRaw)
   const mltCertificate = parseMltCertificate(mltCertificateRaw)
@@ -418,6 +475,7 @@ export async function fetchCpnpProductData(productCode: string): Promise<CpnpPro
     fragranceAllergens,
     ingredientDocs,
     inci,
+    coaCertificate,
     petCertificate,
     stabilityCertificate,
     mltCertificate,
@@ -434,11 +492,15 @@ export async function fetchCpnpProductDataBatch(
 }
 
 export interface CpnpGenerationHistoryItem {
+  id: string | null
   product_code: string
   document_type: string
   generated_at: string
   pdf_url: string | null
   status: string | null
+  reused: boolean
+  package_no: string | null
+  issued_date: string | null
   metadata: Record<string, unknown> | null
 }
 
@@ -469,7 +531,7 @@ export async function fetchCpnpGenerationHistory(
   }
 
   const { data, error } = await queryUnknownTable('cpnp_document_generations')
-    .select('product_code, document_type, generated_at, pdf_url, status, metadata')
+    .select('id, product_code, document_type, generated_at, issued_date, pdf_url, status, metadata')
     .order('generated_at', { ascending: false })
     .range(from, to)
 
@@ -483,8 +545,12 @@ export async function fetchCpnpGenerationHistory(
 
   return (data ?? []).map((row) => {
     const item = row as Record<string, unknown>
+    const metadata = item.metadata && typeof item.metadata === 'object'
+      ? (item.metadata as Record<string, unknown>)
+      : null
 
     return {
+      id: typeof item.id === 'string' ? item.id : null,
       product_code:
         typeof item.product_code === 'string' ? item.product_code : String(item.product_code ?? ''),
       document_type:
@@ -495,10 +561,10 @@ export async function fetchCpnpGenerationHistory(
         typeof item.generated_at === 'string' ? item.generated_at : String(item.generated_at ?? ''),
       pdf_url: typeof item.pdf_url === 'string' ? item.pdf_url : null,
       status: typeof item.status === 'string' ? item.status : null,
-      metadata:
-        item.metadata && typeof item.metadata === 'object'
-          ? (item.metadata as Record<string, unknown>)
-          : null,
+      reused: metadata?.reused === true,
+      package_no: typeof metadata?.package_no === 'string' ? metadata.package_no : null,
+      issued_date: typeof item.issued_date === 'string' ? item.issued_date : null,
+      metadata,
     }
   })
 }

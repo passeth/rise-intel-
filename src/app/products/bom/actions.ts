@@ -30,6 +30,7 @@ export async function uploadBomData(rows: BomCsvRow[]): Promise<BomUploadResult>
           materialcode: r.materialcode,
           materialname: r.materialname,
           usemount: r.usemount,
+          '품목구분': r.itemType || null,
         })),
         { onConflict: 'prdcode,materialcode' }
       )

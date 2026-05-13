@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { fetchCpnpProductData } from '@/app/v2/pif/cpnp/data'
@@ -10,6 +12,7 @@ import type {
 } from '@/app/v2/pif/cpnp/types'
 
 const MAX_BATCH_SIZE = 50
+const TEMPLATE_VERSION = 'finished-product-v1'
 
 const VALID_DOCUMENT_TYPES: CpnpDocumentType[] = [
   'composition_formula',
@@ -35,14 +38,48 @@ const AUTO_GENERATABLE_TYPES = [
   'mlt',
 ] as const
 
+const REUSABLE_ISSUED_TYPES = new Set<CpnpDocumentType>(['coa', 'msds'])
+
 type AutoGeneratableDocumentType = (typeof AUTO_GENERATABLE_TYPES)[number]
 
-type GeneratorFn = (data: CpnpProductData) => Promise<Blob>
+type GeneratorFn = (
+  data: CpnpProductData,
+  options?: {
+    issuedAt?: Date
+  }
+) => Promise<Blob>
+
+type SupabaseUnknown = {
+  from: (table: string) => any
+  storage: any
+}
+
+type PackageRecord = {
+  id: string | null
+  packageNo: string | null
+  documentCount: number
+}
+
+type LatestIssuedDocument = {
+  id: string | null
+  url: string
+  generatedAt: string | null
+}
 
 const AUTO_GENERATABLE_TYPE_SET = new Set<CpnpDocumentType>(AUTO_GENERATABLE_TYPES)
 
 function isAutoGeneratableType(type: CpnpDocumentType): type is AutoGeneratableDocumentType {
   return AUTO_GENERATABLE_TYPE_SET.has(type)
+}
+
+function isMissingOptionalTableError(error: { message?: string } | null | undefined): boolean {
+  const message = error?.message ?? ''
+  return (
+    message.includes("Could not find the table 'public.cpnp_document_generations'") ||
+    message.includes("Could not find the table 'public.cpnp_packages'") ||
+    message.includes("Could not find the table 'public.cpnp_package_documents'") ||
+    message.includes('schema cache')
+  )
 }
 
 function formatKoreaDateForFileName(date: Date): string {
@@ -58,6 +95,39 @@ function formatKoreaDateForFileName(date: Date): string {
   const day = parts.find((part) => part.type === 'day')?.value ?? '00'
 
   return `${year}${month}${day}`
+}
+
+function formatKoreaDateForIssue(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? '0000'
+  const month = parts.find((part) => part.type === 'month')?.value ?? '00'
+  const day = parts.find((part) => part.type === 'day')?.value ?? '00'
+
+  return `${year}-${month}-${day}`
+}
+
+function formatKoreaTimestampForPackage(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '00'
+
+  return `${value('year')}${value('month')}${value('day')}-${value('hour')}${value('minute')}${value('second')}`
 }
 
 function sanitizePdfFileNamePart(value: string): string {
@@ -79,15 +149,218 @@ function buildCpnpPdfFileName(data: CpnpProductData, date: Date): string {
   return `${productCode}_${productEnglishName}_${yymmdd}.pdf`
 }
 
+function buildPackageNo(date: Date): string {
+  return `CPNP-${formatKoreaTimestampForPackage(date)}`
+}
+
+function buildTemplateKey(type: CpnpDocumentType): string {
+  if (type === 'coa') return 'finished_product_coa'
+  if (type === 'msds') return 'finished_product_msds'
+  return `cpnp_${type}`
+}
+
+function buildSourceSnapshot(data: CpnpProductData, type: CpnpDocumentType) {
+  const base = {
+    product: data.product,
+    inci: data.inci,
+  }
+
+  if (type === 'coa') {
+    return {
+      ...base,
+      coaCertificate: data.coaCertificate,
+      englishSpecs: data.englishSpecs,
+      qcSpecs: data.qcSpecs,
+    }
+  }
+
+  if (type === 'msds') {
+    return {
+      ...base,
+      bom: data.bom,
+      qcSpecs: data.qcSpecs,
+      englishSpecs: data.englishSpecs,
+    }
+  }
+
+  return {
+    ...base,
+    bom: data.bom,
+    qcSpecs: data.qcSpecs,
+    englishSpecs: data.englishSpecs,
+    petCertificate: data.petCertificate,
+    stabilityCertificate: data.stabilityCertificate,
+    mltCertificate: data.mltCertificate,
+  }
+}
+
+function hashSnapshot(snapshot: unknown): string {
+  return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')
+}
+
+function getSourceCertificateId(data: CpnpProductData, type: CpnpDocumentType): string | null {
+  if (type === 'coa') return data.coaCertificate?.id ?? null
+  if (type === 'pet') return data.petCertificate?.id ?? null
+  if (type === 'stability') return data.stabilityCertificate?.id ?? null
+  if (type === 'mlt') return data.mltCertificate?.id ?? null
+  return null
+}
+
+async function findLatestIssuedDocument(
+  supabase: SupabaseUnknown,
+  productCode: string,
+  type: CpnpDocumentType,
+  sourceHash: string
+): Promise<LatestIssuedDocument | null> {
+  const { data, error } = await supabase
+    .from('cpnp_document_generations')
+    .select('id, pdf_url, generated_at')
+    .eq('product_code', productCode)
+    .eq('document_type', type)
+    .eq('source_hash', sourceHash)
+    .in('status', ['generated', 'issued'])
+    .not('pdf_url', 'is', null)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingOptionalTableError(error)) return null
+    return null
+  }
+
+  const row = data as Record<string, unknown> | null
+  const url = typeof row?.pdf_url === 'string' ? row.pdf_url : null
+  if (!url) return null
+
+  return {
+    id: typeof row?.id === 'string' ? row.id : null,
+    url,
+    generatedAt: typeof row?.generated_at === 'string' ? row.generated_at : null,
+  }
+}
+
+async function createPackage(
+  supabase: SupabaseUnknown,
+  packageNo: string,
+  productCodes: string[],
+  documentTypes: CpnpDocumentType[]
+): Promise<PackageRecord | null> {
+  const { data, error } = await supabase
+    .from('cpnp_packages')
+    .insert({
+      package_no: packageNo,
+      product_codes: productCodes,
+      document_types: documentTypes,
+      status: 'issued',
+      metadata: {
+        product_count: productCodes.length,
+        document_count: productCodes.length * documentTypes.length,
+      },
+    })
+    .select('id, package_no')
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingOptionalTableError(error)) return null
+    return null
+  }
+
+  const row = data as Record<string, unknown> | null
+  return {
+    id: typeof row?.id === 'string' ? row.id : null,
+    packageNo: typeof row?.package_no === 'string' ? row.package_no : packageNo,
+    documentCount: 0,
+  }
+}
+
+async function recordGeneration(
+  supabase: SupabaseUnknown,
+  values: Record<string, unknown>
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('cpnp_document_generations')
+    .insert(values)
+    .select('id')
+    .maybeSingle()
+
+  if (!error) {
+    const row = data as Record<string, unknown> | null
+    return typeof row?.id === 'string' ? row.id : null
+  }
+
+  if (isMissingOptionalTableError(error)) {
+    return null
+  }
+
+  const legacyValues = {
+    product_code: values.product_code,
+    document_type: values.document_type,
+    generated_at: values.generated_at,
+    pdf_url: values.pdf_url,
+    status: values.status,
+    metadata: values.metadata,
+  }
+
+  const legacyResult = await supabase
+    .from('cpnp_document_generations')
+    .insert(legacyValues)
+    .select('id')
+    .maybeSingle()
+
+  if (legacyResult.error) {
+    if (isMissingOptionalTableError(legacyResult.error)) return null
+    throw new Error(`DB insert failed: ${legacyResult.error.message}`)
+  }
+
+  const row = legacyResult.data as Record<string, unknown> | null
+  return typeof row?.id === 'string' ? row.id : null
+}
+
+async function addPackageDocument(
+  supabase: SupabaseUnknown,
+  packageRecord: PackageRecord | null,
+  values: {
+    generationId: string | null
+    productCode: string
+    documentType: CpnpDocumentType
+    pdfUrl: string
+    displayOrder: number
+    reused: boolean
+  }
+): Promise<void> {
+  if (!packageRecord?.id) return
+
+  const { error } = await supabase.from('cpnp_package_documents').insert({
+    package_id: packageRecord.id,
+    document_generation_id: values.generationId,
+    product_code: values.productCode,
+    document_type: values.documentType,
+    pdf_url: values.pdfUrl,
+    display_order: values.displayOrder,
+    status: 'included',
+    metadata: {
+      reused: values.reused,
+      package_no: packageRecord.packageNo,
+    },
+  })
+
+  if (!error) {
+    packageRecord.documentCount += 1
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       productCodes?: unknown
       documents?: unknown
+      reuseIssuedDocuments?: unknown
     }
 
     const productCodes = body.productCodes
     const documents = body.documents
+    const reuseIssuedDocuments = body.reuseIssuedDocuments !== false
 
     if (!Array.isArray(productCodes) || productCodes.length === 0) {
       return NextResponse.json({ error: 'productCodes must be a non-empty array' }, { status: 400 })
@@ -125,6 +398,8 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedTypes = requestedDocuments as CpnpDocumentType[]
+    const normalizedProductCodes = productCodes.map((code) => code.trim())
+    const packageNo = buildPackageNo(new Date())
 
     const { generateCompositionFormulaPdf } = await import(
       '@/lib/doc-gen/cpnp/pdf-composition-formula'
@@ -150,7 +425,8 @@ export async function POST(request: NextRequest) {
       mlt: generateMltPdf,
     }
 
-    const supabase = await createClient()
+    const supabase = (await createClient()) as unknown as SupabaseUnknown
+    const packageRecord = await createPackage(supabase, packageNo, normalizedProductCodes, requestedTypes)
     const results: CpnpProductResult[] = []
 
     const uploadFile = async (blob: Blob, path: string): Promise<string> => {
@@ -167,9 +443,7 @@ export async function POST(request: NextRequest) {
       return data.publicUrl
     }
 
-    for (const rawProductCode of productCodes) {
-      const productCode = rawProductCode.trim()
-
+    for (const productCode of normalizedProductCodes) {
       try {
         const data = await fetchCpnpProductData(productCode)
         if (!data) {
@@ -188,7 +462,7 @@ export async function POST(request: NextRequest) {
 
         const productName = data.product.english_name || data.product.korean_name || productCode
 
-        const documentTasks = requestedTypes.map(async (type): Promise<CpnpDocumentResult> => {
+        const documentTasks = requestedTypes.map(async (type, documentIndex): Promise<CpnpDocumentResult> => {
           if (!isAutoGeneratableType(type)) {
             return {
               type,
@@ -200,44 +474,81 @@ export async function POST(request: NextRequest) {
 
           try {
             const generatedAtDate = new Date()
+            const generatedAt = generatedAtDate.toISOString()
+            const issuedDate = formatKoreaDateForIssue(generatedAtDate)
+            const sourceSnapshot = buildSourceSnapshot(data, type)
+            const sourceHash = hashSnapshot(sourceSnapshot)
+
+            if (reuseIssuedDocuments && REUSABLE_ISSUED_TYPES.has(type)) {
+              const latestIssuedDocument = await findLatestIssuedDocument(
+                supabase,
+                productCode,
+                type,
+                sourceHash
+              )
+
+              if (latestIssuedDocument) {
+                await addPackageDocument(supabase, packageRecord, {
+                  generationId: latestIssuedDocument.id,
+                  productCode,
+                  documentType: type,
+                  pdfUrl: latestIssuedDocument.url,
+                  displayOrder: documentIndex,
+                  reused: true,
+                })
+
+                return {
+                  type,
+                  url: latestIssuedDocument.url,
+                  generationId: latestIssuedDocument.id,
+                  reused: true,
+                }
+              }
+            }
+
             const fileName = buildCpnpPdfFileName(data, generatedAtDate)
             const filePath = `cpnp/${productCode}/${type}/${fileName}`
-            const pdfBlob = await generator(data)
+            const pdfBlob = await generator(data, { issuedAt: generatedAtDate })
             const url = await uploadFile(pdfBlob, filePath)
+            const metadata = {
+              product_name: productName,
+              package_no: packageRecord?.packageNo ?? packageNo,
+              template_key: buildTemplateKey(type),
+              template_version: TEMPLATE_VERSION,
+              reused: false,
+              issued_date: issuedDate,
+            }
 
-            const generatedAt = generatedAtDate.toISOString()
-            const insertIntoUnknownTable = (table: string) =>
-              supabase.from(table as never) as unknown as {
-                insert: (
-                  values: Record<string, unknown>
-                ) => Promise<{ error: { message: string } | null }>
-              }
-
-            const { error: dbError } = await insertIntoUnknownTable('cpnp_document_generations').insert({
+            const generationId = await recordGeneration(supabase, {
               product_code: productCode,
               document_type: type,
               generated_at: generatedAt,
+              issued_date: issuedDate,
               pdf_url: url,
-              status: 'generated',
-              metadata: {
-                product_name: productName,
-              },
+              storage_path: filePath,
+              status: 'issued',
+              template_key: buildTemplateKey(type),
+              template_version: TEMPLATE_VERSION,
+              source_certificate_id: getSourceCertificateId(data, type),
+              source_hash: sourceHash,
+              source_snapshot: sourceSnapshot,
+              metadata,
             })
 
-            if (dbError) {
-              if (dbError.message.includes("Could not find the table 'public.cpnp_document_generations'")) {
-                return {
-                  type,
-                  url,
-                }
-              }
-
-              throw new Error(`DB insert failed: ${dbError.message}`)
-            }
+            await addPackageDocument(supabase, packageRecord, {
+              generationId,
+              productCode,
+              documentType: type,
+              pdfUrl: url,
+              displayOrder: documentIndex,
+              reused: false,
+            })
 
             return {
               type,
               url,
+              generationId,
+              reused: false,
             }
           } catch (error) {
             return {
@@ -285,6 +596,7 @@ export async function POST(request: NextRequest) {
     const response: CpnpGenerationResponse = {
       status: responseStatus,
       results,
+      package: packageRecord,
     }
 
     return NextResponse.json(response)
