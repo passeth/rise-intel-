@@ -25,15 +25,14 @@ import { useUser } from '@/providers/user-provider'
 import { Loader2, Save, ShieldAlert, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  ADMIN_ROLES,
   createManagedUser,
   listManagedUsers,
   updateManagedUserPassword,
   updateManagedUserProfile,
   updateManagedUserRole,
-  type AdminRole,
   type ManagedUser,
 } from './actions'
+import { ADMIN_ROLES, type AdminRole } from './constants'
 
 const ROLE_LABELS = new Map(ADMIN_ROLES.map((role) => [role.value, role.label]))
 
