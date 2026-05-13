@@ -3,9 +3,18 @@
 import { Fragment, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -39,16 +48,44 @@ import {
   FileText,
   ExternalLink,
   Download,
+  Upload,
   X,
 } from 'lucide-react'
 import {
   fetchIngredients,
+  updateIngredientAllergenMarking,
+  type AllergenMarkingType,
   type LabIngredientRow,
   type SortField,
   type SortDirection,
 } from './actions'
+import { appendDocumentUrl, type DocCategory } from './[ingredientCode]/actions'
+import { toast } from 'sonner'
 
 const PAGE_SIZE = 50
+type IngredientListView = 'inci-expanded' | 'summary'
+
+const ALLERGEN_MARKING_OPTIONS: Array<{
+  value: AllergenMarkingType
+  label: string
+  className: string
+}> = [
+  {
+    value: 'fragrance',
+    label: 'Fragrance',
+    className: 'border-purple-200 bg-purple-50 text-purple-700',
+  },
+  {
+    value: 'essential_oil',
+    label: 'Essential oil',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  },
+  {
+    value: 'others',
+    label: 'Others',
+    className: 'border-amber-200 bg-amber-50 text-amber-700',
+  },
+]
 
 const DOC_CATEGORIES = [
   { key: 'coa_urls' as const, label: '업체성적서', short: 'COA' },
@@ -63,14 +100,66 @@ function getTotalDocCount(item: LabIngredientRow): number {
   return DOC_CATEGORIES.reduce((sum, cat) => sum + (item[cat.key]?.length ?? 0), 0)
 }
 
+function DocumentStatusChips({
+  ingredient,
+  emptyClassName = 'text-[#E5E5E5] text-[10px]',
+}: {
+  ingredient: LabIngredientRow
+  emptyClassName?: string
+}) {
+  const docCount = getTotalDocCount(ingredient)
+
+  if (docCount === 0) {
+    return <span className={emptyClassName}>-</span>
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {DOC_CATEGORIES.map((cat) => {
+        const count = ingredient[cat.key]?.length ?? 0
+        if (count === 0) return null
+        return (
+          <span
+            key={cat.key}
+            className="inline-flex items-center gap-0.5 rounded border border-[#E5E5E5] bg-[#F9F9F9] px-1.5 py-0.5 text-[10px] text-[#666666] transition-colors hover:bg-[#E5E5E5] whitespace-nowrap"
+          >
+            {cat.short}
+            <span className="font-semibold text-[#1A1A1A]">{count}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function AllergenMarkingBadge({ value }: { value: AllergenMarkingType | null }) {
+  const option = ALLERGEN_MARKING_OPTIONS.find((item) => item.value === value)
+
+  if (!option) {
+    return <span className="text-xs text-[#DADADA]">-</span>
+  }
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${option.className}`}
+    >
+      {option.label}
+    </span>
+  )
+}
+
 function DocumentModal({
   ingredient,
   onClose,
+  onUploaded,
 }: {
   ingredient: LabIngredientRow
   onClose: () => void
+  onUploaded: () => void
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [uploadDocType, setUploadDocType] = useState<DocCategory>('coa_urls')
+  const [isUploading, setIsUploading] = useState(false)
   const previewFileName = previewUrl
     ? decodeURIComponent(previewUrl.split('/').pop() || 'document')
     : ''
@@ -79,6 +168,43 @@ function DocumentModal({
     (cat) => (ingredient[cat.key]?.length ?? 0) > 0
   )
   const defaultTab = firstCategoryWithDocs?.key ?? 'coa_urls'
+  const handleDocUpload = async (file: File) => {
+    setIsUploading(true)
+    try {
+      const supabase = createClient()
+      const today = new Date().toISOString().slice(0, 10)
+      const typeFolder = uploadDocType.replace('_urls', '')
+      const safeFileName = file.name.replace(/[^\w.\-가-힣() ]/g, '_')
+      const storagePath = `ingredients/${ingredient.ingredient_code}/${typeFolder}/${today}_${safeFileName}`
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, file, { contentType: file.type, upsert: true })
+
+      if (uploadError) {
+        toast.error(`업로드 실패: ${uploadError.message}`)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(storagePath)
+      const { error } = await appendDocumentUrl(
+        ingredient.ingredient_code,
+        uploadDocType,
+        urlData.publicUrl
+      )
+
+      if (error) {
+        toast.error(`저장 실패: ${error}`)
+        return
+      }
+
+      onUploaded()
+      toast.success('문서가 업로드되었습니다')
+    } catch {
+      toast.error('업로드 중 오류가 발생했습니다')
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -107,6 +233,43 @@ function DocumentModal({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-auto p-4">
+          <div className="mb-4 rounded-md border border-[#E5E5E5] bg-white p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#666666]">
+              <Upload className="h-4 w-4" />
+              문서 업로드
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[220px_1fr] md:items-center">
+              <Select value={uploadDocType} onValueChange={(value) => setUploadDocType(value as DocCategory)}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOC_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.key} value={cat.key}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                type="file"
+                disabled={isUploading}
+                className="h-9 text-xs"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void handleDocUpload(file)
+                  event.currentTarget.value = ''
+                }}
+              />
+            </div>
+            {isUploading && (
+              <div className="mt-2 flex items-center gap-1 text-xs text-[#666666]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                업로드 중...
+              </div>
+            )}
+          </div>
+
           <Tabs defaultValue={defaultTab} className="w-full">
             <TabsList className="w-full justify-start bg-[#F9F9F9] p-1 mb-4 h-auto flex-wrap">
               {DOC_CATEGORIES.map((cat) => {
@@ -260,11 +423,14 @@ function SortIcon({
 }
 
 export default function V2IngredientsPage() {
+  const queryClient = useQueryClient()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [sortField, setSortField] = useState<SortField>('ingredient_code')
   const [sortDir, setSortDir] = useState<SortDirection>('asc')
+  const [listView, setListView] = useState<IngredientListView>('inci-expanded')
+  const [selectedIngredientCodes, setSelectedIngredientCodes] = useState<Set<string>>(new Set())
   const [docModalItem, setDocModalItem] = useState<LabIngredientRow | null>(null)
   const router = useRouter()
 
@@ -279,10 +445,32 @@ export default function V2IngredientsPage() {
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const hasNext = page < totalPages
   const hasPrev = page > 1
+  const selectedCount = selectedIngredientCodes.size
+  const allSummarySelected =
+    ingredients.length > 0 &&
+    ingredients.every((ingredient) => selectedIngredientCodes.has(ingredient.ingredient_code))
+  const someSummarySelected = ingredients.some((ingredient) =>
+    selectedIngredientCodes.has(ingredient.ingredient_code)
+  )
+
+  const allergenMutation = useMutation({
+    mutationFn: updateIngredientAllergenMarking,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error || '알러젠 관리 분류 저장에 실패했습니다')
+        return
+      }
+      setSelectedIngredientCodes(new Set())
+      queryClient.invalidateQueries({ queryKey: ['v2-ingredients'] })
+      toast.success('알러젠 관리 분류를 저장했습니다')
+    },
+    onError: (error: Error) => toast.error(error.message || '알러젠 관리 분류 저장에 실패했습니다'),
+  })
 
   const handleSearch = () => {
     setSearch(searchInput)
     setPage(1)
+    setSelectedIngredientCodes(new Set())
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -297,6 +485,34 @@ export default function V2IngredientsPage() {
       setSortDir('asc')
     }
     setPage(1)
+    setSelectedIngredientCodes(new Set())
+  }
+
+  const toggleIngredientSelection = (ingredientCode: string, checked: boolean) => {
+    setSelectedIngredientCodes((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(ingredientCode)
+      else next.delete(ingredientCode)
+      return next
+    })
+  }
+
+  const toggleSummaryPageSelection = (checked: boolean) => {
+    setSelectedIngredientCodes((prev) => {
+      const next = new Set(prev)
+      for (const ingredient of ingredients) {
+        if (checked) next.add(ingredient.ingredient_code)
+        else next.delete(ingredient.ingredient_code)
+      }
+      return next
+    })
+  }
+
+  const applyAllergenMarking = (markingType: AllergenMarkingType | null) => {
+    allergenMutation.mutate({
+      ingredientCodes: Array.from(selectedIngredientCodes),
+      markingType,
+    })
   }
 
   const renderPagination = () => {
@@ -357,6 +573,65 @@ export default function V2IngredientsPage() {
         </Button>
       </div>
 
+      <Tabs
+        value={listView}
+        onValueChange={(value) => {
+          setListView(value as IngredientListView)
+          setSelectedIngredientCodes(new Set())
+        }}
+        className="mb-4"
+      >
+        <TabsList className="h-auto bg-[#F9F9F9] p-1">
+          <TabsTrigger value="inci-expanded" className="h-8 px-3 text-xs">
+            INCI 펼침
+          </TabsTrigger>
+          <TabsTrigger value="summary" className="h-8 px-3 text-xs">
+            원료 문서현황
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {listView === 'summary' && selectedCount > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[#333333] bg-[#1A1A1A] px-4 py-3 text-white shadow-sm">
+          <span className="text-sm font-medium">{selectedCount.toLocaleString()}개 원료 선택됨</span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {ALLERGEN_MARKING_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={allergenMutation.isPending}
+                onClick={() => applyAllergenMarking(option.value)}
+                className="h-8 text-xs"
+              >
+                {option.label}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={allergenMutation.isPending}
+              onClick={() => applyAllergenMarking(null)}
+              className="h-8 text-xs text-white hover:bg-[#333333] hover:text-white"
+            >
+              분류 해제
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={allergenMutation.isPending}
+              onClick={() => setSelectedIngredientCodes(new Set())}
+              className="h-8 text-xs text-white hover:bg-[#333333] hover:text-white"
+            >
+              선택 해제
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-[#E5E5E5] shadow-sm overflow-hidden flex flex-col max-w-[1400px]">
         {isLoading && ingredients.length === 0 ? (
           <div className="flex items-center justify-center py-16">
@@ -371,7 +646,155 @@ export default function V2IngredientsPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto relative">
+            {listView === 'summary' ? (
+              <div className="overflow-x-auto relative">
+                <Table className="min-w-[900px] border-collapse">
+                  <TableHeader className="bg-[#F9F9F9] sticky top-0 z-20">
+                    <TableRow className="border-b border-[#E5E5E5]">
+                      <TableHead className="w-[44px] text-center">
+                        <Checkbox
+                          checked={allSummarySelected ? true : someSummarySelected ? 'indeterminate' : false}
+                          onCheckedChange={(value) => toggleSummaryPageSelection(value === true)}
+                          aria-label="현재 페이지 원료 전체 선택"
+                          className="mx-auto"
+                        />
+                      </TableHead>
+                      <TableHead
+                        className="w-[150px] text-xs font-semibold text-[#666666] whitespace-nowrap cursor-pointer"
+                        onClick={() => handleSort('ingredient_code')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          원료코드
+                          <SortIcon
+                            field="ingredient_code"
+                            sortField={sortField}
+                            sortDir={sortDir}
+                          />
+                        </span>
+                      </TableHead>
+                      <TableHead
+                        className="min-w-[280px] text-xs font-semibold text-[#666666] whitespace-nowrap cursor-pointer"
+                        onClick={() => handleSort('ingredient_name')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          원료명
+                          <SortIcon
+                            field="ingredient_name"
+                            sortField={sortField}
+                            sortDir={sortDir}
+                          />
+                        </span>
+                      </TableHead>
+                      <TableHead
+                        className="w-[180px] text-xs font-semibold text-[#666666] whitespace-nowrap cursor-pointer"
+                        onClick={() => handleSort('manufacturer')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          제조사
+                          <SortIcon
+                            field="manufacturer"
+                            sortField={sortField}
+                            sortDir={sortDir}
+                          />
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-[280px] text-xs font-semibold text-[#666666] whitespace-nowrap">
+                        문서 현황
+                      </TableHead>
+                      <TableHead className="w-[150px] text-xs font-semibold text-[#666666] whitespace-nowrap">
+                        알러젠 관리
+                      </TableHead>
+                      <TableHead className="w-[110px] text-center text-xs font-semibold text-[#666666]">
+                        업로드
+                      </TableHead>
+                      <TableHead className="w-[40px] text-center text-xs font-semibold text-[#666666]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ingredients.map((ingredient) => {
+                      const docCount = getTotalDocCount(ingredient)
+
+                      return (
+                        <TableRow
+                          key={ingredient.id}
+                          className="cursor-pointer border-b border-[#E5E5E5] hover:bg-[#F9F9F9]/70"
+                          onClick={() =>
+                            router.push(
+                              `/v2/ingredients/${encodeURIComponent(ingredient.ingredient_code)}`
+                            )
+                          }
+                        >
+                          <TableCell
+                            className="py-3 text-center align-top"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Checkbox
+                              checked={selectedIngredientCodes.has(ingredient.ingredient_code)}
+                              onCheckedChange={(value) =>
+                                toggleIngredientSelection(ingredient.ingredient_code, value === true)
+                              }
+                              aria-label={`${ingredient.ingredient_code} 선택`}
+                              className="mx-auto"
+                            />
+                          </TableCell>
+                          <TableCell className="py-3 align-top">
+                            <Link
+                              href={`/v2/ingredients/${encodeURIComponent(ingredient.ingredient_code)}`}
+                              className="font-mono text-xs font-medium text-[#1A1A1A] hover:underline"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {ingredient.ingredient_code}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="py-3 align-top text-xs font-medium text-[#1A1A1A]">
+                            {ingredient.ingredient_name}
+                          </TableCell>
+                          <TableCell className="py-3 align-top text-xs text-[#666666]">
+                            {ingredient.manufacturer || (
+                              <span className="text-[#DADADA]">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell
+                            className="py-3 align-top"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              if (docCount > 0) setDocModalItem(ingredient)
+                            }}
+                          >
+                            <DocumentStatusChips
+                              ingredient={ingredient}
+                              emptyClassName="text-[#DADADA] text-xs"
+                            />
+                          </TableCell>
+                          <TableCell className="py-3 align-top">
+                            <AllergenMarkingBadge value={ingredient.allergen_marking_type} />
+                          </TableCell>
+                          <TableCell
+                            className="py-3 text-center align-top"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-[#DADADA] px-2 text-xs"
+                              onClick={() => setDocModalItem(ingredient)}
+                            >
+                              <Upload className="mr-1 h-3.5 w-3.5" />
+                              업로드
+                            </Button>
+                          </TableCell>
+                          <TableCell className="py-3 text-center align-middle">
+                            <ChevronRightIcon className="mx-auto h-4 w-4 text-[#999999]" />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto relative">
               <Table className="table-fixed min-w-[1300px] border-collapse [&_td]:whitespace-normal [&_td]:break-words [&_td]:[overflow-wrap:anywhere]">
                 <TableHeader className="bg-[#F9F9F9] sticky top-0 z-20">
                   <TableRow className="border-b border-[#E5E5E5]">
@@ -523,25 +946,7 @@ export default function V2IngredientsPage() {
                                       if (docCount > 0) setDocModalItem(ingredient)
                                     }}
                                   >
-                                    {docCount > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {DOC_CATEGORIES.map((cat) => {
-                                          const count = ingredient[cat.key]?.length ?? 0
-                                          if (count === 0) return null
-                                          return (
-                                            <span
-                                              key={cat.key}
-                                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-[#F9F9F9] border border-[#E5E5E5] text-[#666666] hover:bg-[#E5E5E5] transition-colors whitespace-nowrap"
-                                            >
-                                              {cat.short}
-                                              <span className="font-semibold text-[#1A1A1A]">{count}</span>
-                                            </span>
-                                          )
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <span className="text-[#E5E5E5] text-[10px]">-</span>
-                                    )}
+                                    <DocumentStatusChips ingredient={ingredient} />
                                   </TableCell>
                                   <TableCell
                                     rowSpan={componentCount}
@@ -560,6 +965,7 @@ export default function V2IngredientsPage() {
                 </TableBody>
               </Table>
             </div>
+            )}
 
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-[#E5E5E5] bg-[#F9F9F9]/50">
@@ -617,6 +1023,9 @@ export default function V2IngredientsPage() {
         <DocumentModal
           ingredient={docModalItem}
           onClose={() => setDocModalItem(null)}
+          onUploaded={() => {
+            queryClient.invalidateQueries({ queryKey: ['v2-ingredients'] })
+          }}
         />
       )}
     </div>

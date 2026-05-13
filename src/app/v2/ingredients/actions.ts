@@ -27,6 +27,7 @@ export interface LabIngredientRow {
   ingredient_name: string
   manufacturer: string | null
   origin_country: string | null
+  allergen_marking_type: AllergenMarkingType | null
   coa_urls: string[]
   composition_urls: string[]
   msds_en_urls: string[]
@@ -36,6 +37,7 @@ export interface LabIngredientRow {
   components: IngredientComponent[]
 }
 
+export type AllergenMarkingType = 'fragrance' | 'essential_oil' | 'others'
 export type SortField = 'ingredient_code' | 'ingredient_name' | 'manufacturer'
 export type SortDirection = 'asc' | 'desc'
 
@@ -47,6 +49,21 @@ export interface LabIngredientListResult {
 // ── Constants ──
 
 const SELECT_COLUMNS = [
+  'id',
+  'ingredient_code',
+  'ingredient_name',
+  'manufacturer',
+  'origin_country',
+  'allergen_marking_type',
+  'coa_urls',
+  'composition_urls',
+  'msds_en_urls',
+  'msds_kr_urls',
+  'fragrance_urls',
+  'other_urls',
+].join(', ')
+
+const LEGACY_SELECT_COLUMNS = [
   'id',
   'ingredient_code',
   'ingredient_name',
@@ -72,6 +89,17 @@ const COMPONENT_COLUMNS = [
 ].join(', ')
 
 const DEFAULT_PAGE_SIZE = 50
+const ALLERGEN_MARKING_TYPES = new Set<AllergenMarkingType>([
+  'fragrance',
+  'essential_oil',
+  'others',
+])
+
+function normalizeAllergenMarkingType(value: unknown): AllergenMarkingType | null {
+  return typeof value === 'string' && ALLERGEN_MARKING_TYPES.has(value as AllergenMarkingType)
+    ? (value as AllergenMarkingType)
+    : null
+}
 
 // ── Fetch Ingredients List ──
 
@@ -89,19 +117,32 @@ export async function fetchIngredients(
   const ascending = sortDir === 'asc'
 
 
-  let query = fromTable(supabase, 'labdoc_ingredients')
-    .select(SELECT_COLUMNS, { count: 'exact' })
+  const buildQuery = (includeAllergenField: boolean) => {
+    let query = fromTable(supabase, 'labdoc_ingredients')
+      .select(includeAllergenField ? SELECT_COLUMNS : LEGACY_SELECT_COLUMNS, { count: 'exact' })
 
-  if (search) {
-    const term = `%${search}%`
-    query = query.or(
-      `ingredient_code.ilike.${term},ingredient_name.ilike.${term},manufacturer.ilike.${term}`
-    )
+    if (search) {
+      const term = `%${search}%`
+      query = query.or(
+        `ingredient_code.ilike.${term},ingredient_name.ilike.${term},manufacturer.ilike.${term}`
+      )
+    }
+
+    return query
   }
 
-  const { data: ingredients, count, error } = await query
+  let { data: ingredients, count, error } = await buildQuery(true)
     .order(sortField, { ascending })
     .range(from, to)
+
+  if (error && error.message.includes('allergen_marking_type')) {
+    const fallback = await buildQuery(false)
+      .order(sortField, { ascending })
+      .range(from, to)
+    ingredients = fallback.data
+    count = fallback.count
+    error = fallback.error
+  }
 
   if (error) {
     console.error('fetchIngredients error:', error)
@@ -147,6 +188,7 @@ export async function fetchIngredients(
     ingredient_name: i.ingredient_name,
     manufacturer: i.manufacturer,
     origin_country: i.origin_country,
+    allergen_marking_type: normalizeAllergenMarkingType(i.allergen_marking_type),
     coa_urls: (i.coa_urls ?? []) as string[],
     composition_urls: (i.composition_urls ?? []) as string[],
     msds_en_urls: (i.msds_en_urls ?? []) as string[],
@@ -170,6 +212,7 @@ export interface IngredientDetail {
   ingredient_name: string
   manufacturer: string | null
   origin_country: string | null
+  allergen_marking_type: AllergenMarkingType | null
   coa_urls: string[]
   composition_urls: string[]
   msds_en_urls: string[]
@@ -183,10 +226,19 @@ export async function fetchIngredientDetail(
 ): Promise<IngredientDetail | null> {
   const supabase = await createClient()
 
-  const { data, error } = await fromTable(supabase, 'labdoc_ingredients')
+  let { data, error } = await fromTable(supabase, 'labdoc_ingredients')
     .select(SELECT_COLUMNS)
     .eq('ingredient_code', ingredientCode)
     .maybeSingle()
+
+  if (error && error.message.includes('allergen_marking_type')) {
+    const fallback = await fromTable(supabase, 'labdoc_ingredients')
+      .select(LEGACY_SELECT_COLUMNS)
+      .eq('ingredient_code', ingredientCode)
+      .maybeSingle()
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) {
     console.error('fetchIngredientDetail error:', error)
@@ -201,6 +253,7 @@ export async function fetchIngredientDetail(
     ingredient_name: data.ingredient_name,
     manufacturer: data.manufacturer,
     origin_country: data.origin_country,
+    allergen_marking_type: normalizeAllergenMarkingType(data.allergen_marking_type),
     coa_urls: (data.coa_urls ?? []) as string[],
     composition_urls: (data.composition_urls ?? []) as string[],
     msds_en_urls: (data.msds_en_urls ?? []) as string[],
@@ -208,6 +261,44 @@ export async function fetchIngredientDetail(
     fragrance_urls: (data.fragrance_urls ?? []) as string[],
     other_urls: (data.other_urls ?? []) as string[],
   }
+}
+
+export async function updateIngredientAllergenMarking(input: {
+  ingredientCodes: string[]
+  markingType: AllergenMarkingType | null
+}): Promise<{ success: boolean; error?: string }> {
+  const ingredientCodes = Array.from(
+    new Set(input.ingredientCodes.map((code) => code.trim()).filter(Boolean))
+  )
+
+  if (ingredientCodes.length === 0) {
+    return { success: false, error: '선택된 원료가 없습니다.' }
+  }
+
+  const markingType =
+    input.markingType && ALLERGEN_MARKING_TYPES.has(input.markingType)
+      ? input.markingType
+      : null
+
+  const supabase = await createClient()
+  const { error } = await fromTable(supabase, 'labdoc_ingredients')
+    .update({
+      allergen_marking_type: markingType,
+      updated_at: new Date().toISOString(),
+    })
+    .in('ingredient_code', ingredientCodes)
+
+  if (error) {
+    console.error('updateIngredientAllergenMarking error:', error)
+    return {
+      success: false,
+      error: error.message.includes('allergen_marking_type')
+        ? 'DB 마이그레이션(sql/006_ingredient_allergen_marking_type.sql)이 먼저 필요합니다.'
+        : error.message,
+    }
+  }
+
+  return { success: true }
 }
 
 // ── Fetch Components for a Single Ingredient ──
