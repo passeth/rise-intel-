@@ -93,6 +93,8 @@ type InciMergedRow = {
   id?: string
   key: string
   inciName: string
+  inciNameKo?: string
+  inciNameEn?: string
   casNo: string
   functionName: string
   wtPercent: number
@@ -220,7 +222,7 @@ export default function V2PifDetailPage() {
 
   const standardMutation = useMutation({
     mutationFn: updateProductStandard,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (!result.success) {
         toast.error(result.error || '제품표준서 저장에 실패했습니다')
         return
@@ -237,7 +239,7 @@ export default function V2PifDetailPage() {
 
   const functionMutation = useMutation({
     mutationFn: updateProductFunctions,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (!result.success) {
         toast.error(result.error || 'Function 저장에 실패했습니다')
         return
@@ -251,12 +253,12 @@ export default function V2PifDetailPage() {
 
   const inciOrderMutation = useMutation({
     mutationFn: updateProductInciItemOrders,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (!result.success) {
         toast.error(result.error || 'INCI 순서 저장에 실패했습니다')
         return
       }
-      queryClient.invalidateQueries({ queryKey: ['pif-product-detail', decodedProductCode] })
+      await queryClient.invalidateQueries({ queryKey: ['pif-product-detail', decodedProductCode] })
       toast.success('1% 미만 INCI 표시 순서를 저장했습니다')
     },
     onError: (error: Error) => toast.error(error.message || 'INCI 순서 저장에 실패했습니다'),
@@ -408,6 +410,8 @@ export default function V2PifDetailPage() {
           id: item.id,
           key: item.id,
           inciName: item.inci_name_en || item.inci_name_ko || item.merge_key,
+          inciNameKo: item.inci_name_ko || item.inci_name_en || item.merge_key,
+          inciNameEn: item.inci_name_en || item.inci_name_ko || item.merge_key,
           casNo: item.cas_no || '-',
           functionName: item.function_name || '-',
           wtPercent: Number(item.wt_percent ?? 0),
@@ -432,6 +436,8 @@ export default function V2PifDetailPage() {
         merged.set(key, {
           key,
           inciName: item.materialname,
+          inciNameKo: item.materialname,
+          inciNameEn: item.materialname,
           casNo: '-',
           functionName: '-',
           wtPercent: rawWtPercent,
@@ -468,6 +474,8 @@ export default function V2PifDetailPage() {
           key,
           inciName:
             component.inci_name_en || component.inci_name_kr || item.materialname,
+          inciNameKo: component.inci_name_kr || component.inci_name_en || item.materialname,
+          inciNameEn: component.inci_name_en || component.inci_name_kr || item.materialname,
           casNo: component.cas_number || '-',
           functionName: component.function || '-',
           wtPercent: ingredientWt,
@@ -1363,14 +1371,14 @@ function StandardDocument({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 p-3 text-xs">
           <div>
             <div className="mb-1 text-[#666666]">국문 전성분</div>
-            <div className="min-h-16 border border-[#E5E5E5] p-2 whitespace-pre-wrap text-[#1A1A1A]">
-              {renderDash(productDetail?.inci?.inci_ko)}
+            <div className="min-h-16 border border-[#E5E5E5] p-2 leading-6 text-[#1A1A1A]">
+              <HighlightedInciText value={productDetail?.inci?.inci_ko} rows={inciRows} language="ko" />
             </div>
           </div>
           <div>
             <div className="mb-1 text-[#666666]">영문 전성분</div>
-            <div className="min-h-16 border border-[#E5E5E5] p-2 whitespace-pre-wrap text-[#1A1A1A]">
-              {renderDash(productDetail?.inci?.inci_en)}
+            <div className="min-h-16 border border-[#E5E5E5] p-2 leading-6 text-[#1A1A1A]">
+              <HighlightedInciText value={productDetail?.inci?.inci_en} rows={inciRows} language="en" />
             </div>
           </div>
         </div>
@@ -1410,6 +1418,55 @@ function productToStandardForm(product: ProductDetailProduct): Record<string, st
     usage_precautions: product.usage_precautions ?? '',
     remarks: product.remarks ?? '',
   }
+}
+
+function HighlightedInciText({
+  value,
+  rows,
+  language,
+}: {
+  value?: string | null
+  rows: InciMergedRow[]
+  language: 'ko' | 'en'
+}) {
+  if (!value || value.trim().length === 0) {
+    return <>{renderDash(value)}</>
+  }
+
+  const belowOneNames = new Set(
+    rows
+      .filter((row) => row.isBelowOnePercent)
+      .flatMap((row) => {
+        const primaryName = language === 'ko' ? row.inciNameKo : row.inciNameEn
+        return [primaryName, row.inciName]
+      })
+      .map((name) => (name ?? '').trim().toLowerCase())
+      .filter(Boolean)
+  )
+
+  return (
+    <>
+      {value.split(',').map((part, index, parts) => {
+        const name = part.trim()
+        const isBelowOne = belowOneNames.has(name.toLowerCase())
+
+        return (
+          <span key={`${name}-${index}`}>
+            <span
+              className={
+                isBelowOne
+                  ? 'rounded bg-amber-100 px-1 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200'
+                  : undefined
+              }
+            >
+              {name}
+            </span>
+            {index < parts.length - 1 ? ', ' : ''}
+          </span>
+        )
+      })}
+    </>
+  )
 }
 
 function StandardInput({
@@ -1464,6 +1521,12 @@ function SubOnePercentOrderEditor({
   const fixedCount = rows.filter((row) => !row.isBelowOnePercent).length
   const [orderedRows, setOrderedRows] = useState(() => rows.filter((row) => row.isBelowOnePercent && row.id))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const currentRowIds = rows
+    .filter((row) => row.isBelowOnePercent && row.id)
+    .map((row) => row.id)
+    .join('|')
+  const orderedRowIds = orderedRows.map((row) => row.id).join('|')
+  const hasOrderChanges = currentRowIds !== orderedRowIds
 
   const moveRow = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0) return
@@ -1485,13 +1548,26 @@ function SubOnePercentOrderEditor({
 
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-        1% 이상 성분은 함량순으로 고정됩니다. 아래 1% 미만 INCI만 드래그해서 표시 순서를 변경한 뒤 저장하세요.
+      <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 md:flex-row md:items-center md:justify-between">
+        <div className="text-[11px] text-amber-800">
+          1% 이상 성분은 함량순으로 고정됩니다. 아래 1% 미만 INCI만 드래그해서 표시 순서를 변경한 뒤 저장하세요.
+        </div>
+        {orderedRows.length > 0 && (
+          <Button
+            disabled={isSaving || !hasOrderChanges}
+            onClick={saveOrder}
+            className="h-8 shrink-0 bg-amber-600 text-xs text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+            순서 저장
+          </Button>
+        )}
       </div>
       {orderedRows.length === 0 ? (
         <div className="px-3 py-8 text-center text-xs text-[#999999]">1% 미만 INCI 데이터가 없습니다.</div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {orderedRows.map((row, index) => (
             <div
               key={row.id ?? row.inciName}
@@ -1503,20 +1579,25 @@ function SubOnePercentOrderEditor({
                 setDragIndex(null)
               }}
               onDragEnd={() => setDragIndex(null)}
-              className={`grid cursor-grab grid-cols-[48px_1fr_96px] items-center gap-3 rounded-md border px-3 py-2 text-xs active:cursor-grabbing ${
+              className={`min-h-[104px] cursor-grab rounded-md border px-3 py-2 text-xs active:cursor-grabbing ${
                 dragIndex === index ? 'border-amber-400 bg-amber-100' : 'border-[#E5E5E5] bg-white hover:bg-amber-50'
               }`}
             >
-              <div className="text-center font-mono text-[#999999]">#{index + 1}</div>
-              <div>
-                <div className="font-medium text-[#1A1A1A]">{row.inciName}</div>
-                <div className="text-[10px] text-[#999999]">CAS: {row.casNo}</div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="font-mono text-[11px] font-semibold text-amber-700">#{index + 1}</div>
+                <div className="font-mono text-[11px] text-amber-700">{row.wtPercent.toFixed(5)}%</div>
               </div>
-              <div className="text-right font-mono text-amber-700">{row.wtPercent.toFixed(5)}%</div>
+              <div className="line-clamp-2 font-medium leading-4 text-[#1A1A1A]" title={row.inciName}>
+                {row.inciName}
+              </div>
+              <div className="mt-2 truncate text-[10px] text-[#999999]" title={row.casNo}>
+                CAS: {row.casNo}
+              </div>
             </div>
           ))}
-          <div className="flex justify-end pt-2">
-            <Button disabled={isSaving} onClick={saveOrder} className="h-8 text-xs">
+          </div>
+          <div className="flex justify-end pt-1">
+            <Button disabled={isSaving || !hasOrderChanges} onClick={saveOrder} className="h-8 text-xs">
               {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
               순서 저장
             </Button>
