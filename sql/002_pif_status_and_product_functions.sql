@@ -66,6 +66,7 @@ WITH normalized_bom AS (
     c.id AS component_id,
     c.function
   FROM normalized_bom nb
+  JOIN labdoc_ingredients i ON i.ingredient_code = nb.ingredient_code
   JOIN labdoc_ingredient_components c ON c.ingredient_code = nb.ingredient_code
 )
 INSERT INTO labdoc_product_component_functions (
@@ -96,6 +97,7 @@ WITH normalized_bom AS (
     nb.ingredient_code,
     NULLIF(string_agg(DISTINCT c.function, ', ' ORDER BY c.function) FILTER (WHERE c.function IS NOT NULL AND length(trim(c.function)) > 0), '') AS function
   FROM normalized_bom nb
+  JOIN labdoc_ingredients i ON i.ingredient_code = nb.ingredient_code
   LEFT JOIN labdoc_ingredient_components c ON c.ingredient_code = nb.ingredient_code
   GROUP BY nb.product_code, nb.ingredient_code
 )
