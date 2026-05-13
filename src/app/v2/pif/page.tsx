@@ -45,9 +45,8 @@ type ColumnDef = {
 }
 
 const columns: ColumnDef[] = [
-  { key: 'management_code', label: '관리번호', width: 'w-24', editable: true },
-  { key: 'korean_name', label: '제품명(국문)', width: 'min-w-[200px]', editable: true },
-  { key: 'english_name', label: '제품명(영문)', width: 'min-w-[200px]', editable: true },
+  { key: 'korean_name', label: '제품명(국문)', width: 'w-[320px] min-w-[320px] max-w-[320px]', editable: true },
+  { key: 'english_name', label: '제품명(영문)', width: 'w-[360px] min-w-[360px] max-w-[360px]', editable: true },
   { key: 'label_volume', label: '표시용량', width: 'w-20', editable: true },
   { key: 'cosmetic_type', label: '화장품유형', width: 'w-28', editable: true },
   { key: 'created_date', label: '작성일자', width: 'w-24', editable: false },
@@ -230,15 +229,68 @@ export default function V2PifPage() {
     })
   }
 
+  const isFirstProductInManagementGroup = (product: PifProduct, index: number) => {
+    const managementCode = product.management_code?.trim()
+    if (!managementCode || index === 0) return true
+    return products[index - 1]?.management_code?.trim() !== managementCode
+  }
+
+  const renderProductIdentityCell = (product: PifProduct, index: number) => {
+    const managementCode = product.management_code?.trim()
+    const showManagementCode = isFirstProductInManagementGroup(product, index)
+
+    return (
+      <TableCell className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-10 bg-white p-2 align-top border-r border-[#E5E5E5] shadow-[1px_0_0_0_#E5E5E5] min-w-[220px] w-[220px]`}>
+        <div className="flex items-start gap-1">
+          <div className="grid min-w-0 flex-1 grid-cols-[88px_10px_minmax(0,1fr)] items-start gap-1 text-xs leading-5">
+            {managementCode && showManagementCode ? (
+              <>
+                <span className="font-mono font-semibold text-slate-700 break-words">
+                  {managementCode}
+                </span>
+                <span className="text-slate-400">-</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true" />
+                <span aria-hidden="true" />
+              </>
+            )}
+            <Link
+              href={`/v2/pif/${encodeURIComponent(product.product_code)}`}
+              className="font-mono font-medium text-blue-600 hover:underline break-words"
+            >
+              {product.product_code}
+            </Link>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={() =>
+                router.push(
+                  `/v2/pif/new?edit=${encodeURIComponent(product.product_code)}`
+                )
+              }
+              className="mt-0.5 p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded shrink-0"
+              title="수정"
+            >
+              <Pencil size={11} />
+            </button>
+          )}
+        </div>
+      </TableCell>
+    )
+  }
+
   const renderCell = (product: PifProduct, col: ColumnDef) => {
     const isEditing =
       editingCell?.productCode === product.product_code &&
       editingCell?.field === col.key
     const value = product[col.key]
+    const isNameColumn = col.key === 'korean_name' || col.key === 'english_name'
 
     if (isEditing) {
       return (
-        <TableCell key={col.key} className={`p-1 ${col.width}`}>
+        <TableCell key={col.key} className={`p-1 align-top ${col.width}`}>
           <Input
             ref={editInputRef}
             value={editValue}
@@ -255,7 +307,7 @@ export default function V2PifPage() {
     return (
       <TableCell
         key={col.key}
-        className={`p-2 ${col.width} ${
+        className={`p-2 align-top ${col.width} ${
           col.editable
             ? 'cursor-pointer hover:bg-blue-50/50 transition-colors'
             : ''
@@ -266,6 +318,8 @@ export default function V2PifPage() {
       >
         <span
           className={`text-xs ${
+            isNameColumn ? 'block whitespace-normal break-words leading-5' : 'whitespace-nowrap'
+          } ${
             value === null || value === ''
               ? 'text-[#E5E5E5]'
               : 'text-[#1A1A1A]'
@@ -404,8 +458,8 @@ export default function V2PifPage() {
                         />
                       </TableHead>
                     )}
-                    <TableHead className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-20 bg-[#F9F9F9] w-28 text-xs font-semibold text-[#666666] whitespace-nowrap shadow-[1px_0_0_0_#E5E5E5]`}>
-                      제품코드
+                    <TableHead className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-20 bg-[#F9F9F9] min-w-[220px] w-[220px] text-xs font-semibold text-[#666666] whitespace-nowrap shadow-[1px_0_0_0_#E5E5E5]`}>
+                      관리번호 - 제품코드
                     </TableHead>
                     {columns.map((col) => (
                       <TableHead
@@ -438,29 +492,7 @@ export default function V2PifPage() {
                           />
                         </TableCell>
                       )}
-                      <TableCell className={`${isAdmin ? 'left-10' : 'left-0'} sticky z-10 bg-white p-2 border-r border-[#E5E5E5] shadow-[1px_0_0_0_#E5E5E5]`}>
-                        <div className="flex items-center gap-1">
-                          <Link
-                            href={`/v2/pif/${encodeURIComponent(product.product_code)}`}
-                            className="font-mono text-xs text-blue-600 hover:underline font-medium truncate"
-                          >
-                            {product.product_code}
-                          </Link>
-                          {isAdmin && (
-                            <button
-                              onClick={() =>
-                                router.push(
-                                  `/v2/pif/new?edit=${encodeURIComponent(product.product_code)}`
-                                )
-                              }
-                              className="p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded shrink-0"
-                              title="수정"
-                            >
-                              <Pencil size={11} />
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
+                      {renderProductIdentityCell(product, index)}
                       {columns.map((col) => renderCell(product, col))}
                     </TableRow>
                   ))}

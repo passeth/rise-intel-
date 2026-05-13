@@ -114,6 +114,7 @@ export async function fetchPifProducts(
 
   const { data, count, error } = await query
     .order('management_code', { ascending: true, nullsFirst: false })
+    .order('product_code', { ascending: true })
     .range(from, to)
 
   if (error && error.message.includes('pif_status')) {
@@ -142,6 +143,7 @@ export async function fetchPifProducts(
 
     const legacy = await legacyQuery
       .order('management_code', { ascending: true, nullsFirst: false })
+      .order('product_code', { ascending: true })
       .range(from, to)
 
     if (legacy.error) {

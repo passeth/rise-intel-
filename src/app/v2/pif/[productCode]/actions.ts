@@ -59,6 +59,17 @@ export interface ProductQcSpec {
   specification_en: string | null
 }
 
+export interface ProductRelatedProduct {
+  product_code: string
+  management_code: string | null
+  korean_name: string | null
+  english_name: string | null
+  label_volume: string | null
+  fill_volume: string | null
+  semi_product_code: string | null
+  p_product_code: string | null
+}
+
 export interface ProductManufacturingProcess {
   id: string
   product_code: string
@@ -149,6 +160,7 @@ export interface ProductDetailData {
   bom: NormalizedBomItem[]
   inci: ProductInci | null
   inciItems: ProductInciItem[]
+  relatedProducts: ProductRelatedProduct[]
 }
 
 function normalizeIngredientCode(code: string): string {
@@ -316,10 +328,11 @@ export async function fetchProductDetail(
       bom: [],
       inci: null,
       inciItems: [],
+      relatedProducts: [],
     }
   }
 
-  const [images, revisionsResult, specsResult, processResult, bom, inciResult, inciItemsResult] =
+  const [images, revisionsResult, specsResult, processResult, bom, inciResult, inciItemsResult, relatedProductsResult] =
     await Promise.all([
       (async () => {
         const { data: riseProduct } = await supabase
@@ -387,7 +400,14 @@ export async function fetchProductDetail(
         .from('labdoc_product_inci_items')
         .select('id, product_code, merge_key, inci_name_ko, inci_name_en, cas_no, function_name, wt_percent, is_below_one_percent, sort_group, calculated_order, declared_order')
         .eq('product_code', productCode)
-        .order('declared_order', { ascending: true })
+        .order('declared_order', { ascending: true }),
+      product.management_code
+        ? supabase
+            .from('labdoc_products')
+            .select('product_code, management_code, korean_name, english_name, label_volume, fill_volume, semi_product_code, p_product_code')
+            .eq('management_code', product.management_code)
+            .order('product_code', { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
     ])
 
   return {
@@ -399,7 +419,287 @@ export async function fetchProductDetail(
     bom,
     inci: (inciResult.data as ProductInci | null) ?? null,
     inciItems: ((inciItemsResult.data ?? []) as unknown) as ProductInciItem[],
+    relatedProducts: (relatedProductsResult.data ?? []) as ProductRelatedProduct[],
   }
+}
+
+const DERIVED_PRODUCT_RESET_FIELDS = new Set([
+  'id',
+  'created_at',
+  'updated_at',
+  'ingredients_en_pdf_url',
+  'ingredients_en_csv_url',
+  'formula_breakdown_pdf_url',
+  'formula_breakdown_csv_url',
+  'inci_summary_pdf_url',
+  'inci_summary_csv_url',
+])
+
+function cleanText(value: string | null | undefined): string | null {
+  const text = value?.trim()
+  return text && text.length > 0 ? text : null
+}
+
+function cloneRowForProduct(
+  row: Record<string, unknown>,
+  productCode: string,
+  now: string,
+  extra?: Record<string, unknown>
+) {
+  const next: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(row)) {
+    if (key === 'id') continue
+    next[key] = value
+  }
+  next.product_code = productCode
+  if ('created_at' in row) next.created_at = now
+  if ('updated_at' in row) next.updated_at = now
+  return { ...next, ...extra }
+}
+
+export async function createDerivedProduct(input: {
+  sourceProductCode: string
+  newProductCode: string
+  koreanName?: string | null
+  englishName?: string | null
+  labelVolume?: string | null
+  fillVolume?: string | null
+  packagingUnit?: string | null
+  pProductCode?: string | null
+  copyImages?: boolean
+}): Promise<{ success: boolean; productCode?: string; error?: string }> {
+  const supabase = await createClient()
+  const sourceProductCode = input.sourceProductCode.trim()
+  const newProductCode = input.newProductCode.trim()
+  const now = new Date().toISOString()
+
+  if (!sourceProductCode || !newProductCode) {
+    return { success: false, error: '원본 제품코드와 신규 제품코드는 필수입니다' }
+  }
+
+  if (sourceProductCode === newProductCode) {
+    return { success: false, error: '신규 제품코드는 원본 제품코드와 달라야 합니다' }
+  }
+
+  const { data: existingProduct, error: existingError } = await supabase
+    .from('labdoc_products')
+    .select('product_code')
+    .eq('product_code', newProductCode)
+    .maybeSingle()
+
+  if (existingError) {
+    return { success: false, error: existingError.message }
+  }
+
+  if (existingProduct) {
+    return { success: false, error: `${newProductCode} 제품코드가 이미 존재합니다` }
+  }
+
+  const { data: existingRiseProduct } = await supabase
+    .from('rise_products')
+    .select('id')
+    .eq('code', newProductCode)
+    .maybeSingle()
+
+  const { data: sourceProduct, error: sourceError } = await supabase
+    .from('labdoc_products')
+    .select('*')
+    .eq('product_code', sourceProductCode)
+    .maybeSingle()
+
+  if (sourceError) {
+    return { success: false, error: sourceError.message }
+  }
+
+  if (!sourceProduct) {
+    return { success: false, error: '원본 제품을 찾을 수 없습니다' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dynamicSupabase = supabase as any
+
+  const productPayload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(sourceProduct)) {
+    if (DERIVED_PRODUCT_RESET_FIELDS.has(key)) continue
+    productPayload[key] = value
+  }
+
+  productPayload.product_code = newProductCode
+  productPayload.korean_name = cleanText(input.koreanName) ?? sourceProduct.korean_name
+  productPayload.english_name = cleanText(input.englishName) ?? sourceProduct.english_name
+  productPayload.label_volume = cleanText(input.labelVolume)
+  productPayload.fill_volume = cleanText(input.fillVolume)
+  productPayload.packaging_unit = cleanText(input.packagingUnit) ?? sourceProduct.packaging_unit
+  productPayload.p_product_code = cleanText(input.pProductCode)
+  productPayload.created_at = now
+  productPayload.updated_at = now
+
+  const { error: insertProductError } = await dynamicSupabase
+    .from('labdoc_products')
+    .insert(productPayload)
+
+  if (insertProductError) {
+    console.error('createDerivedProduct product error:', insertProductError)
+    return { success: false, error: insertProductError.message }
+  }
+
+  async function copyProductCodeTable(tableName: string, extra?: Record<string, unknown>) {
+    const { data, error } = await dynamicSupabase
+      .from(tableName)
+      .select('*')
+      .eq('product_code', sourceProductCode)
+
+    if (error) {
+      if (error.message?.includes('Could not find the table')) return
+      throw new Error(`${tableName}: ${error.message}`)
+    }
+
+    const rows = ((data ?? []) as Record<string, unknown>[]).map((row) =>
+      cloneRowForProduct(row, newProductCode, now, extra)
+    )
+    if (rows.length === 0) return
+
+    const { error: insertError } = await dynamicSupabase.from(tableName).insert(rows)
+    if (insertError) {
+      throw new Error(`${tableName}: ${insertError.message}`)
+    }
+  }
+
+  try {
+    await copyProductCodeTable('labdoc_product_revisions')
+    await copyProductCodeTable('labdoc_product_qc_specs')
+    await copyProductCodeTable('labdoc_product_inci')
+    await copyProductCodeTable('labdoc_product_inci_items')
+    await copyProductCodeTable('labdoc_product_work_specs', {
+      product_name: productPayload.korean_name,
+      label_volume: productPayload.label_volume,
+      fill_volume: productPayload.fill_volume,
+    })
+    await copyProductCodeTable('labdoc_product_subsidiary_materials', {
+      management_code: sourceProduct.management_code,
+    })
+    await copyProductCodeTable('labdoc_product_ingredient_functions')
+    await copyProductCodeTable('labdoc_product_component_functions')
+
+    const { data: sourceProcesses, error: processesError } = await dynamicSupabase
+      .from('labdoc_manufacturing_processes')
+      .select('*')
+      .eq('product_code', sourceProductCode)
+
+    if (processesError) {
+      throw new Error(`labdoc_manufacturing_processes: ${processesError.message}`)
+    }
+
+    for (const process of (sourceProcesses ?? []) as Record<string, unknown>[]) {
+      const oldProcessId = process.id
+      const processPayload = cloneRowForProduct(process, newProductCode, now, {
+        product_name: productPayload.korean_name,
+      })
+      const { data: insertedProcess, error: insertProcessError } = await dynamicSupabase
+        .from('labdoc_manufacturing_processes')
+        .insert(processPayload)
+        .select('id')
+        .single()
+
+      if (insertProcessError) {
+        throw new Error(`labdoc_manufacturing_processes: ${insertProcessError.message}`)
+      }
+
+      const { data: steps, error: stepsError } = await dynamicSupabase
+        .from('labdoc_manufacturing_process_steps')
+        .select('*')
+        .eq('process_id', oldProcessId)
+
+      if (stepsError) {
+        throw new Error(`labdoc_manufacturing_process_steps: ${stepsError.message}`)
+      }
+
+      const stepRows = ((steps ?? []) as Record<string, unknown>[]).map((step) => {
+        const next: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(step)) {
+          if (key === 'id') continue
+          next[key] = value
+        }
+        next.process_id = insertedProcess.id
+        if ('created_at' in step) next.created_at = now
+        return next
+      })
+
+      if (stepRows.length > 0) {
+        const { error: insertStepsError } = await dynamicSupabase
+          .from('labdoc_manufacturing_process_steps')
+          .insert(stepRows)
+        if (insertStepsError) {
+          throw new Error(`labdoc_manufacturing_process_steps: ${insertStepsError.message}`)
+        }
+      }
+    }
+
+    const { data: sourceRiseProduct } = await supabase
+      .from('rise_products')
+      .select('*')
+      .eq('code', sourceProductCode)
+      .maybeSingle()
+
+    if (sourceRiseProduct && !existingRiseProduct) {
+      const riseProductPayload: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(sourceRiseProduct)) {
+        if (key === 'id') continue
+        riseProductPayload[key] = value
+      }
+      riseProductPayload.code = newProductCode
+      riseProductPayload.name = productPayload.korean_name ?? sourceRiseProduct.name
+      riseProductPayload.specification = productPayload.label_volume ?? sourceRiseProduct.specification
+
+      const { data: newRiseProduct, error: riseProductError } = await dynamicSupabase
+        .from('rise_products')
+        .insert(riseProductPayload)
+        .select('id')
+        .single()
+
+      if (riseProductError) {
+        throw new Error(`rise_products: ${riseProductError.message}`)
+      }
+
+      if (input.copyImages) {
+        const { data: sourceImages, error: imagesError } = await supabase
+          .from('product_images')
+          .select('*')
+          .eq('product_id', sourceRiseProduct.id ?? '')
+
+        if (imagesError) {
+          throw new Error(`product_images: ${imagesError.message}`)
+        }
+
+        const imageRows = (sourceImages ?? []).map((image) => {
+          const next: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(image)) {
+            if (key === 'id') continue
+            next[key] = value
+          }
+          next.product_id = newRiseProduct.id
+          if ('created_at' in image) next.created_at = now
+          if ('updated_at' in image) next.updated_at = now
+          return next
+        })
+
+        if (imageRows.length > 0) {
+          const { error: imageInsertError } = await dynamicSupabase.from('product_images').insert(imageRows)
+          if (imageInsertError) {
+            throw new Error(`product_images: ${imageInsertError.message}`)
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('createDerivedProduct copy error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '파생 품목 데이터 복사 중 오류가 발생했습니다',
+    }
+  }
+
+  return { success: true, productCode: newProductCode }
 }
 
 const STANDARD_EDITABLE_FIELDS = new Set([

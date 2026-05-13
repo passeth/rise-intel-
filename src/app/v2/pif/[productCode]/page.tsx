@@ -7,6 +7,14 @@ import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
@@ -18,6 +26,7 @@ import {
   Atom,
   Beaker,
   ChevronLeft,
+  Copy,
   Factory,
   FileSpreadsheet,
   FileText,
@@ -28,11 +37,13 @@ import {
   ListChecks,
   Loader2,
   Package2,
+  Plus,
   Save,
   Scale,
   Search,
 } from 'lucide-react'
 import {
+  createDerivedProduct,
   fetchProductDetail,
   updateProductFunctions,
   updateProductInciItemOrders,
@@ -42,6 +53,7 @@ import {
   type ProductDetailProduct,
   type ProductInciItem,
   type ProductQcSpec,
+  type ProductRelatedProduct,
 } from './actions'
 import { fetchPifProducts, type PifProduct } from '../actions'
 
@@ -87,6 +99,17 @@ type AllergenRow = {
   name: string
   casNo: string
   wtPercent: number
+}
+
+type DerivedProductForm = {
+  newProductCode: string
+  koreanName: string
+  englishName: string
+  labelVolume: string
+  fillVolume: string
+  packagingUnit: string
+  pProductCode: string
+  copyImages: boolean
 }
 
 type InciMergedRow = {
@@ -188,6 +211,17 @@ export default function V2PifDetailPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<PifProduct[]>([])
   const [searching, setSearching] = useState(false)
+  const [deriveOpen, setDeriveOpen] = useState(false)
+  const [deriveForm, setDeriveForm] = useState<DerivedProductForm>({
+    newProductCode: '',
+    koreanName: '',
+    englishName: '',
+    labelVolume: '',
+    fillVolume: '',
+    packagingUnit: '',
+    pProductCode: '',
+    copyImages: false,
+  })
 
   // Product search handler
   const handleSearch = async (query: string) => {
@@ -264,6 +298,22 @@ export default function V2PifDetailPage() {
     onError: (error: Error) => toast.error(error.message || 'INCI 순서 저장에 실패했습니다'),
   })
 
+  const derivedProductMutation = useMutation({
+    mutationFn: createDerivedProduct,
+    onSuccess: async (result) => {
+      if (!result.success || !result.productCode) {
+        toast.error(result.error || '파생 품목 생성에 실패했습니다')
+        return
+      }
+      await queryClient.invalidateQueries({ queryKey: ['pif-product-detail'] })
+      await queryClient.invalidateQueries({ queryKey: ['pif-products'] })
+      setDeriveOpen(false)
+      toast.success(`${result.productCode} 품목을 추가했습니다`)
+      router.push(`/v2/pif/${encodeURIComponent(result.productCode)}`)
+    },
+    onError: (error: Error) => toast.error(error.message || '파생 품목 생성에 실패했습니다'),
+  })
+
   const printMutation = useMutation({
     mutationFn: async () => {
       window.print()
@@ -296,6 +346,36 @@ export default function V2PifDetailPage() {
   const images = data?.images ?? []
   const processRecord = data?.process.process ?? null
   const processSteps = data?.process.steps ?? []
+
+  const openDerivedProductDialog = () => {
+    if (!product) return
+    setDeriveForm({
+      newProductCode: '',
+      koreanName: product.korean_name ?? '',
+      englishName: product.english_name ?? '',
+      labelVolume: product.label_volume ?? '',
+      fillVolume: product.fill_volume ?? '',
+      packagingUnit: product.packaging_unit ?? '',
+      pProductCode: product.p_product_code ?? '',
+      copyImages: false,
+    })
+    setDeriveOpen(true)
+  }
+
+  const submitDerivedProduct = () => {
+    if (!product) return
+    derivedProductMutation.mutate({
+      sourceProductCode: product.product_code,
+      newProductCode: deriveForm.newProductCode,
+      koreanName: deriveForm.koreanName,
+      englishName: deriveForm.englishName,
+      labelVolume: deriveForm.labelVolume,
+      fillVolume: deriveForm.fillVolume,
+      packagingUnit: deriveForm.packagingUnit,
+      pProductCode: deriveForm.pProductCode,
+      copyImages: deriveForm.copyImages,
+    })
+  }
 
   const koreanIngredients = useMemo<KoreanIngredientRow[]>(() => {
     return bom
@@ -640,6 +720,12 @@ export default function V2PifDetailPage() {
               </div>
             </section>
 
+            <RelatedProductsSection
+              currentProductCode={product.product_code}
+              products={data?.relatedProducts ?? []}
+              onAdd={openDerivedProductDialog}
+            />
+
             <section className="p-2">
               <div className="px-2 py-2 text-xs font-medium text-[#666666]">문서</div>
               <div className="space-y-1">
@@ -703,20 +789,31 @@ export default function V2PifDetailPage() {
                     {product.korean_name || product.product_code} / {product.product_code}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => pdfMutation.mutate()}
-                  disabled={pdfMutation.isPending}
-                  className="h-8 text-xs"
-                >
-                  {pdfMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 mr-1" />
-                  )}
-                  현재 탭 PDF 발급
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openDerivedProductDialog}
+                    className="h-8 text-xs"
+                  >
+                    <Copy className="h-3.5 w-3.5 mr-1" />
+                    복사해서 품목 추가
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pdfMutation.mutate()}
+                    disabled={pdfMutation.isPending}
+                    className="h-8 text-xs"
+                  >
+                    {pdfMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    현재 탭 PDF 발급
+                  </Button>
+                </div>
               </div>
             </div>
             <DocumentContent
@@ -747,12 +844,220 @@ export default function V2PifDetailPage() {
           </div>
         </main>
       </div>
+      <DerivedProductDialog
+        open={deriveOpen}
+        onOpenChange={setDeriveOpen}
+        product={product}
+        form={deriveForm}
+        onFormChange={setDeriveForm}
+        onSubmit={submitDerivedProduct}
+        isSubmitting={derivedProductMutation.isPending}
+      />
     </div>
   )
 }
 
 function docLabel(docId: DocId): string {
   return DOC_ITEMS.find((doc) => doc.id === docId)?.label ?? '제품표준서'
+}
+
+function RelatedProductsSection({
+  currentProductCode,
+  products,
+  onAdd,
+}: {
+  currentProductCode: string
+  products: ProductRelatedProduct[]
+  onAdd: () => void
+}) {
+  return (
+    <section className="p-4 border-b border-[#E5E5E5]">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-medium text-[#666666]">같은 관리번호 품목</div>
+          <p className="mt-0.5 text-[11px] text-[#999999]">용량만 다른 품목을 같은 관리번호로 관리합니다.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onAdd} className="h-7 px-2 text-[11px]">
+          <Plus className="mr-1 h-3 w-3" />
+          추가
+        </Button>
+      </div>
+      {products.length === 0 ? (
+        <div className="border border-dashed border-[#E5E5E5] px-2 py-3 text-center text-[11px] text-[#999999]">
+          같은 관리번호 품목이 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {products.map((item) => {
+            const isCurrent = item.product_code === currentProductCode
+            return (
+              <Link
+                key={item.product_code}
+                href={`/v2/pif/${encodeURIComponent(item.product_code)}`}
+                className={`block border px-2 py-2 text-xs transition-colors ${
+                  isCurrent
+                    ? 'border-[#1A1A1A] bg-[#F9F9F9] text-[#1A1A1A]'
+                    : 'border-[#E5E5E5] text-[#666666] hover:border-[#999999] hover:bg-[#F9F9F9]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] font-medium">{item.product_code}</span>
+                  <span className="shrink-0 text-[11px] text-[#999999]">
+                    {renderDash(item.label_volume)}
+                  </span>
+                </div>
+                <div className="mt-1 line-clamp-2 text-[11px] leading-4">
+                  {renderDash(item.korean_name || item.english_name)}
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function DerivedProductDialog({
+  open,
+  onOpenChange,
+  product,
+  form,
+  onFormChange,
+  onSubmit,
+  isSubmitting,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  product: ProductDetailProduct
+  form: DerivedProductForm
+  onFormChange: (form: DerivedProductForm) => void
+  onSubmit: () => void
+  isSubmitting: boolean
+}) {
+  const setField = (field: keyof DerivedProductForm, value: string | boolean) => {
+    onFormChange({ ...form, [field]: value })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(720px,calc(100vw-2rem))] max-w-none">
+        <DialogHeader>
+          <DialogTitle className="text-base">복사해서 품목 추가</DialogTitle>
+          <DialogDescription className="text-xs">
+            현재 품목의 제품표준서, 전성분, 시험기준, Function, 작업/제조공정 데이터를 복사해서 같은 관리번호의 새 품목을 만듭니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-3 gap-2 rounded border border-[#E5E5E5] bg-[#F9F9F9] p-3 text-xs">
+          <InfoLine label="원본" value={product.product_code} />
+          <InfoLine label="관리번호" value={product.management_code} />
+          <InfoLine label="반제품" value={product.semi_product_code} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DerivedInput
+            label="신규 제품코드"
+            value={form.newProductCode}
+            onChange={(value) => setField('newProductCode', value)}
+            placeholder="예: JOCO002"
+            required
+          />
+          <DerivedInput
+            label="완제품 코드"
+            value={form.pProductCode}
+            onChange={(value) => setField('pProductCode', value)}
+            placeholder="예: PJOCO0020"
+          />
+          <DerivedInput
+            label="제품명 국문"
+            value={form.koreanName}
+            onChange={(value) => setField('koreanName', value)}
+          />
+          <DerivedInput
+            label="제품명 영문"
+            value={form.englishName}
+            onChange={(value) => setField('englishName', value)}
+          />
+          <DerivedInput
+            label="표시용량"
+            value={form.labelVolume}
+            onChange={(value) => setField('labelVolume', value)}
+            placeholder="예: 55ml"
+          />
+          <DerivedInput
+            label="충진용량"
+            value={form.fillVolume}
+            onChange={(value) => setField('fillVolume', value)}
+            placeholder="예: 51"
+          />
+          <DerivedInput
+            label="포장단위"
+            value={form.packagingUnit}
+            onChange={(value) => setField('packagingUnit', value)}
+          />
+          <label className="flex items-center gap-2 self-end rounded border border-[#E5E5E5] px-3 py-2 text-xs text-[#666666]">
+            <Checkbox
+              checked={form.copyImages}
+              onCheckedChange={(value) => setField('copyImages', value === true)}
+            />
+            제품 이미지 연결도 복사
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            취소
+          </Button>
+          <Button
+            onClick={onSubmit}
+            disabled={isSubmitting || form.newProductCode.trim().length === 0}
+            className="bg-[#1A1A1A] text-white hover:bg-[#333333]"
+          >
+            {isSubmitting ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Copy className="mr-1 h-3.5 w-3.5" />
+            )}
+            품목 추가
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DerivedInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  required?: boolean
+}) {
+  return (
+    <label className="space-y-1 text-xs">
+      <span className="font-medium text-[#666666]">
+        {label}
+        {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+      </span>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-9 text-xs"
+      />
+    </label>
+  )
 }
 
 function InfoLine({ label, value }: { label: string; value: string | null }) {
