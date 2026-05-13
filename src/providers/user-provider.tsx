@@ -65,8 +65,9 @@ export function useUser() {
 
 export function UserProvider({ children, initialUser }: UserProviderProps) {
   const [user, setUser] = useState<UserData | null>(initialUser ?? null)
-  // Always start with loading false if we have initialUser, otherwise check on mount
-  const [isLoading] = useState(false)
+  // If server did not provide a user, wait for the browser Supabase client to
+  // emit INITIAL_SESSION before redirecting protected pages to /login.
+  const [isLoading, setIsLoading] = useState(!initialUser)
 
   const fetchUserWithRole = useCallback(async (authUser: User | null) => {
     if (!authUser) {
@@ -115,9 +116,11 @@ export function UserProvider({ children, initialUser }: UserProviderProps) {
   }, [])
 
   const refreshUser = useCallback(async () => {
+    setIsLoading(true)
     const supabase = createClient()
     const { data: { user: authUser } } = await supabase.auth.getUser()
     await fetchUserWithRole(authUser)
+    setIsLoading(false)
   }, [fetchUserWithRole])
 
   useEffect(() => {
@@ -128,21 +131,28 @@ export function UserProvider({ children, initialUser }: UserProviderProps) {
         if (event === 'INITIAL_SESSION') {
           // If we already have user from server-side, skip client fetch
           if (initialUser) {
+            setIsLoading(false)
             return
           }
           // No initial user - fetch on client (handles post-login redirect)
           await fetchUserWithRole(session?.user ?? null)
+          setIsLoading(false)
         } else if (event === 'SIGNED_IN') {
           // Skip fetching if we already have initialUser from server-side (post-login redirect)
           // This prevents redundant DB queries after login
           if (!initialUser) {
+            setIsLoading(true)
             await fetchUserWithRole(session?.user ?? null)
+            setIsLoading(false)
           }
         } else if (event === 'TOKEN_REFRESHED') {
           // Always refresh on token refresh
+          setIsLoading(true)
           await fetchUserWithRole(session?.user ?? null)
+          setIsLoading(false)
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
+          setIsLoading(false)
         }
       }
     )
