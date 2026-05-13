@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 import {
   fetchProductDetail,
-  updateProductFunction,
+  updateProductFunctions,
   updateProductStandard,
   type NormalizedBomItem,
   type ProductDetailData,
@@ -87,11 +87,18 @@ type AllergenRow = {
   wtPercent: number
 }
 
+type InciFunctionRef = {
+  ingredientCode: string
+  componentId?: string
+}
+
 type InciMergedRow = {
+  key: string
   inciName: string
   casNo: string
   functionName: string
   wtPercent: number
+  functionRefs: InciFunctionRef[]
 }
 
 const DOC_ITEMS: DocItem[] = [
@@ -230,7 +237,7 @@ export default function V2PifDetailPage() {
   })
 
   const functionMutation = useMutation({
-    mutationFn: updateProductFunction,
+    mutationFn: updateProductFunctions,
     onSuccess: (result) => {
       if (!result.success) {
         toast.error(result.error || 'Function 저장에 실패했습니다')
@@ -386,17 +393,19 @@ export default function V2PifDetailPage() {
     for (const item of bom) {
       const rawWtPercent = toWeightPercent(item.totalUsemount)
       if (item.components.length === 0) {
-        const key = item.materialname
+        const key = `raw:${item.baseCode}:${item.materialname}`
         const existing = merged.get(key)
         if (existing) {
           existing.wtPercent += rawWtPercent
           continue
         }
         merged.set(key, {
+          key,
           inciName: item.materialname,
           casNo: '-',
-          functionName: '-',
+          functionName: item.productFunction || '-',
           wtPercent: rawWtPercent,
+          functionRefs: [{ ingredientCode: item.baseCode }],
         })
         continue
       }
@@ -412,6 +421,7 @@ export default function V2PifDetailPage() {
         const existing = merged.get(key)
         if (existing) {
           existing.wtPercent += ingredientWt
+          existing.functionRefs.push({ ingredientCode: item.baseCode, componentId: component.id })
           const nextFunctions = Array.from(
             new Set(
               [existing.functionName, component.function]
@@ -425,11 +435,13 @@ export default function V2PifDetailPage() {
         }
 
         merged.set(key, {
+          key,
           inciName:
             component.inci_name_en || component.inci_name_kr || item.materialname,
           casNo: component.cas_number || '-',
           functionName: component.function || '-',
           wtPercent: ingredientWt,
+          functionRefs: [{ ingredientCode: item.baseCode, componentId: component.id }],
         })
       }
     }
@@ -686,8 +698,8 @@ export default function V2PifDetailPage() {
                 standardMutation.mutate({ productCode: decodedProductCode, values })
               }
               isSavingStandard={standardMutation.isPending}
-              onSaveFunction={(input) =>
-                functionMutation.mutate({ productCode: decodedProductCode, ...input })
+              onSaveProductFunction={(entries) =>
+                functionMutation.mutate({ productCode: decodedProductCode, entries })
               }
               isSavingFunction={functionMutation.isPending}
             />
@@ -769,7 +781,7 @@ function DocumentContent({
   processSteps,
   onSaveStandard,
   isSavingStandard,
-  onSaveFunction,
+  onSaveProductFunction,
   isSavingFunction,
 }: {
   activeDoc: DocId
@@ -792,11 +804,7 @@ function DocumentContent({
   processSteps: ProductDetailData['process']['steps']
   onSaveStandard: (values: Record<string, string | number | null>) => void
   isSavingStandard: boolean
-  onSaveFunction: (input: {
-    ingredientCode: string
-    componentId?: string
-    functionValue: string | null
-  }) => void
+  onSaveProductFunction: (entries: Array<InciFunctionRef & { functionValue: string | null }>) => void
   isSavingFunction: boolean
 }) {
   const product = productDetail?.product
@@ -966,44 +974,12 @@ function DocumentContent({
 
   if (activeDoc === 'inci-merged') {
     return (
-      <div className="space-y-4">
-        <div className="overflow-x-auto border border-[#E5E5E5] bg-white">
-          <table className="w-full text-xs">
-            <thead className="bg-[#F9F9F9] text-[#666666]">
-              <tr className="border-b border-[#E5E5E5]">
-                <th className="px-3 py-2 w-12 text-center font-medium">No</th>
-                <th className="px-3 py-2 text-left font-medium">INCI Name</th>
-                <th className="px-3 py-2 text-left font-medium">CAS No</th>
-                <th className="px-3 py-2 text-left font-medium">Function</th>
-                <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inciMerged.length === 0 ? (
-                <EmptyRow message="INCI 데이터가 없습니다." colSpan={5} />
-              ) : (
-                inciMerged.map((row, index) => (
-                  <tr key={`${row.inciName}-${index}`} className="border-b border-[#E5E5E5] last:border-b-0">
-                    <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
-                    <td className="px-3 py-2 text-[#1A1A1A]">{row.inciName}</td>
-                    <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
-                    <td className="px-3 py-2 text-[#666666]">{row.functionName}</td>
-                    <td className="px-3 py-2 text-right font-mono text-[#1A1A1A]">
-                      {row.wtPercent.toFixed(5)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <ProductFunctionEditor
-          key={product.product_code}
-          bom={productDetail?.bom ?? []}
-          onSave={onSaveFunction}
-          isSaving={isSavingFunction}
-        />
-      </div>
+      <InciMergedProductFunctionPanel
+        key={product.product_code}
+        rows={inciMerged}
+        onSave={onSaveProductFunction}
+        isSaving={isSavingFunction}
+      />
     )
   }
 
@@ -1381,117 +1357,95 @@ function StandardTextarea({
   )
 }
 
-function ProductFunctionEditor({
-  bom,
+function InciMergedProductFunctionPanel({
+  rows,
   onSave,
   isSaving,
 }: {
-  bom: NormalizedBomItem[]
-  onSave: (input: { ingredientCode: string; componentId?: string; functionValue: string | null }) => void
+  rows: InciMergedRow[]
+  onSave: (entries: Array<InciFunctionRef & { functionValue: string | null }>) => void
   isSaving: boolean
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>(() => bomToFunctionDrafts(bom))
-
-  const updateDraft = (key: string, value: string) => {
-    setDrafts((prev) => ({ ...prev, [key]: value }))
-  }
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const defaultDrafts = useMemo(
+    () =>
+      Object.fromEntries(
+        rows.map((row) => [row.key, row.functionName === '-' ? '' : row.functionName])
+      ),
+    [rows]
+  )
 
   return (
-    <section className="border border-[#E5E5E5] bg-white">
-      <div className="px-3 py-2 border-b border-[#E5E5E5] bg-[#F9F9F9]">
-        <div className="text-xs font-medium text-[#666666]">제품별 Function 설정</div>
-        <p className="mt-1 text-[11px] text-[#999999]">
-          초기값은 원료 컴포넌트 master function에서 마이그레이션되며, 이후 제품별로 덮어쓸 수 있습니다.
-        </p>
+    <div className="space-y-3">
+      <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
+        INCI 합산 행의 Function을 수정하면 연결된 제품별 원료/컴포넌트 Function에 함께 저장됩니다.
       </div>
-      <div className="divide-y divide-[#E5E5E5]">
-        {bom.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-[#999999]">BOM 데이터가 없습니다.</div>
-        ) : (
-          bom.map((item) => {
-            const ingredientKey = `ingredient:${item.baseCode}`
-            return (
-              <div key={item.baseCode} className="p-3 space-y-2">
-                <div className="grid grid-cols-[1fr_260px_72px] gap-2 items-center">
-                  <div>
-                    <div className="text-xs font-medium text-[#1A1A1A]">{item.materialname}</div>
-                    <div className="font-mono text-[11px] text-[#999999]">{item.baseCode}</div>
-                  </div>
-                  <Input
-                    value={drafts[ingredientKey] ?? ''}
-                    onChange={(e) => updateDraft(ingredientKey, e.target.value)}
-                    className="h-8 text-xs"
-                    placeholder={item.defaultFunction || '원료 function'}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isSaving}
-                    onClick={() => onSave({ ingredientCode: item.baseCode, functionValue: drafts[ingredientKey] || null })}
-                    className="h-8 text-xs"
-                  >
-                    저장
-                  </Button>
-                </div>
-                <div className="ml-4 border-l border-[#E5E5E5] pl-3 space-y-1">
-                  {item.components.length === 0 ? (
-                    <div className="text-[11px] text-[#999999]">컴포넌트 없음</div>
-                  ) : (
-                    item.components.map((component) => {
-                      const componentKey = `component:${component.id}`
-                      return (
-                        <div key={component.id} className="grid grid-cols-[1fr_260px_72px] gap-2 items-center">
-                          <div>
-                            <div className="text-[11px] text-[#1A1A1A]">
-                              {renderDash(component.inci_name_en || component.inci_name_kr)}
-                            </div>
-                            <div className="text-[10px] text-[#999999]">
-                              기본값: {renderDash(component.default_function)}
-                              {component.function_source === 'product' ? ' · 제품별 적용중' : ''}
-                            </div>
-                          </div>
-                          <Input
-                            value={drafts[componentKey] ?? ''}
-                            onChange={(e) => updateDraft(componentKey, e.target.value)}
-                            className="h-8 text-xs"
-                            placeholder={component.default_function || '컴포넌트 function'}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isSaving}
-                            onClick={() => onSave({
-                              ingredientCode: item.baseCode,
-                              componentId: component.id,
-                              functionValue: drafts[componentKey] || null,
-                            })}
-                            className="h-8 text-xs"
-                          >
-                            저장
-                          </Button>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            )
-          })
-        )}
+      <div className="overflow-x-auto border border-[#E5E5E5] bg-white">
+        <table className="w-full text-xs">
+          <thead className="bg-[#F9F9F9] text-[#666666]">
+            <tr className="border-b border-[#E5E5E5]">
+              <th className="w-12 px-3 py-2 text-center font-medium">No</th>
+              <th className="px-3 py-2 text-left font-medium">INCI Name</th>
+              <th className="px-3 py-2 text-left font-medium">CAS No</th>
+              <th className="min-w-[260px] px-3 py-2 text-left font-medium">Function</th>
+              <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
+              <th className="w-20 px-3 py-2 text-center font-medium">저장</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <EmptyRow message="INCI 데이터가 없습니다." colSpan={6} />
+            ) : (
+              rows.map((row, index) => {
+                const draftValue = drafts[row.key] ?? defaultDrafts[row.key] ?? ''
+                return (
+                  <tr key={row.key} className="border-b border-[#E5E5E5] last:border-b-0">
+                    <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
+                    <td className="px-3 py-2 text-[#1A1A1A]">{row.inciName}</td>
+                    <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
+                    <td className="px-3 py-2">
+                      <Input
+                        value={draftValue}
+                        onChange={(event) =>
+                          setDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
+                        }
+                        className="h-8 text-xs"
+                        placeholder="제품별 Function"
+                      />
+                      <div className="mt-1 text-[10px] text-[#999999]">
+                        연결 {row.functionRefs.length.toLocaleString()}개
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-[#1A1A1A]">
+                      {row.wtPercent.toFixed(5)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isSaving}
+                        onClick={() =>
+                          onSave(
+                            row.functionRefs.map((ref) => ({
+                              ...ref,
+                              functionValue: draftValue || null,
+                            }))
+                          )
+                        }
+                        className="h-8 text-xs"
+                      >
+                        저장
+                      </Button>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
-    </section>
+    </div>
   )
-}
-
-function bomToFunctionDrafts(bom: NormalizedBomItem[]): Record<string, string> {
-  const next: Record<string, string> = {}
-  for (const item of bom) {
-    next[`ingredient:${item.baseCode}`] = item.productFunction ?? ''
-    for (const component of item.components) {
-      next[`component:${component.id}`] = component.function ?? ''
-    }
-  }
-  return next
 }
 
 async function downloadDocumentPdf({

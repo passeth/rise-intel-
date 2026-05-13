@@ -1024,7 +1024,7 @@ export default function V2PifCpnpPage() {
           }
         }}
       >
-        <DialogContent className="flex h-[min(820px,calc(100vh-2rem))] w-[min(1060px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden rounded-md border-[#DADADA] p-0">
+        <DialogContent className="flex h-[min(820px,calc(100vh-2rem))] w-[min(1000px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden rounded-md border-[#DADADA] p-0">
           <DialogHeader className="border-b border-[#E5E5E5] bg-white px-5 py-4 pr-12">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Badge className="h-5 bg-blue-100 px-2 text-[10px] text-blue-700 hover:bg-blue-100">

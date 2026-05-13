@@ -122,6 +122,21 @@ export interface ProductInci {
   updated_at: string
 }
 
+export interface ProductInciItem {
+  id: string
+  product_code: string
+  merge_key: string
+  inci_name_ko: string | null
+  inci_name_en: string
+  cas_no: string | null
+  function_name: string | null
+  wt_percent: number
+  is_below_one_percent: boolean
+  sort_group: string
+  calculated_order: number
+  declared_order: number
+}
+
 export interface ProductDetailData {
   product: ProductDetailProduct | null
   images: ProductDetailImage[]
@@ -133,6 +148,7 @@ export interface ProductDetailData {
   }
   bom: NormalizedBomItem[]
   inci: ProductInci | null
+  inciItems: ProductInciItem[]
 }
 
 function normalizeIngredientCode(code: string): string {
@@ -298,10 +314,11 @@ export async function fetchProductDetail(
       process: { process: null, steps: [] },
       bom: [],
       inci: null,
+      inciItems: [],
     }
   }
 
-  const [images, revisionsResult, specsResult, processResult, bom, inciResult] =
+  const [images, revisionsResult, specsResult, processResult, bom, inciResult, inciItemsResult] =
     await Promise.all([
       (async () => {
         const { data: riseProduct } = await supabase
@@ -364,6 +381,12 @@ export async function fetchProductDetail(
         .select('*')
         .eq('product_code', productCode)
         .maybeSingle(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from('labdoc_product_inci_items')
+        .select('id, product_code, merge_key, inci_name_ko, inci_name_en, cas_no, function_name, wt_percent, is_below_one_percent, sort_group, calculated_order, declared_order')
+        .eq('product_code', productCode)
+        .order('declared_order', { ascending: true })
     ])
 
   return {
@@ -374,6 +397,7 @@ export async function fetchProductDetail(
     process: processResult,
     bom,
     inci: (inciResult.data as ProductInci | null) ?? null,
+    inciItems: ((inciItemsResult.data ?? []) as unknown) as ProductInciItem[],
   }
 }
 
@@ -500,6 +524,146 @@ export async function updateProductFunction(input: {
   if (error) {
     console.error('updateProductFunction ingredient error:', error)
     return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function updateProductFunctions(input: {
+  productCode: string
+  entries: Array<{
+    ingredientCode: string
+    componentId?: string
+    functionValue: string | null
+  }>
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const now = new Date().toISOString()
+
+  const componentEntries = new Map<string, {
+    ingredientCode: string
+    componentId: string
+    functionValue: string | null
+  }>()
+  const ingredientEntries = new Map<string, {
+    ingredientCode: string
+    functionValue: string | null
+  }>()
+
+  for (const entry of input.entries) {
+    const functionValue = entry.functionValue?.trim() || null
+    if (entry.componentId) {
+      componentEntries.set(entry.componentId, {
+        ingredientCode: entry.ingredientCode,
+        componentId: entry.componentId,
+        functionValue,
+      })
+      continue
+    }
+
+    ingredientEntries.set(entry.ingredientCode, {
+      ingredientCode: entry.ingredientCode,
+      functionValue,
+    })
+  }
+
+  if (componentEntries.size > 0) {
+    const { error } = await supabase
+      .from('labdoc_product_component_functions')
+      .upsert(
+        Array.from(componentEntries.values()).map((entry) => ({
+          product_code: input.productCode,
+          ingredient_code: entry.ingredientCode,
+          component_id: entry.componentId,
+          function: entry.functionValue,
+          updated_at: now,
+        })),
+        { onConflict: 'product_code,component_id' }
+      )
+
+    if (error) {
+      console.error('updateProductFunctions component error:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  if (ingredientEntries.size > 0) {
+    const { error } = await supabase
+      .from('labdoc_product_ingredient_functions')
+      .upsert(
+        Array.from(ingredientEntries.values()).map((entry) => ({
+          product_code: input.productCode,
+          ingredient_code: entry.ingredientCode,
+          function: entry.functionValue,
+          updated_at: now,
+        })),
+        { onConflict: 'product_code,ingredient_code' }
+      )
+
+    if (error) {
+      console.error('updateProductFunctions ingredient error:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  return { success: true }
+}
+
+
+export async function updateProductInciItemOrders(input: {
+  productCode: string
+  items: Array<{ id: string; declaredOrder: number }>
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fromInciItems = (supabase as any).from('labdoc_product_inci_items')
+  const now = new Date().toISOString()
+
+  for (const item of input.items) {
+    const { error } = await fromInciItems
+      .update({ declared_order: item.declaredOrder, updated_at: now })
+      .eq('product_code', input.productCode)
+      .eq('id', item.id)
+
+    if (error) {
+      console.error('updateProductInciItemOrders item error:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  const { data: rows, error: fetchError } = await fromInciItems
+    .select('inci_name_ko, inci_name_en')
+    .eq('product_code', input.productCode)
+    .order('declared_order', { ascending: true })
+
+  if (fetchError) {
+    console.error('updateProductInciItemOrders fetch error:', fetchError)
+    return { success: false, error: fetchError.message }
+  }
+
+  const inciKo = (rows ?? [])
+    .map((row: { inci_name_ko?: string | null; inci_name_en?: string | null }) => row.inci_name_ko || row.inci_name_en)
+    .filter(Boolean)
+    .join(', ')
+  const inciEn = (rows ?? [])
+    .map((row: { inci_name_en?: string | null }) => row.inci_name_en)
+    .filter(Boolean)
+    .join(', ')
+
+  const { error: inciError } = await supabase
+    .from('labdoc_product_inci')
+    .update({
+      inci_ko: inciKo || null,
+      inci_en: inciEn || null,
+      inci_cpnp: inciEn || null,
+      inci_fda: inciEn || null,
+      updated_at: now,
+    })
+    .eq('product_code', input.productCode)
+
+  if (inciError) {
+    console.error('updateProductInciItemOrders inci error:', inciError)
+    return { success: false, error: inciError.message }
   }
 
   return { success: true }
