@@ -304,7 +304,7 @@ export default function CertificatesPage() {
               <Plus size={14} /> 새 성적서 발급
             </Button>
           </DialogTrigger>
-          <DialogContent className="w-[760px] max-w-[760px] sm:max-w-[760px] max-h-[95vh] overflow-y-auto p-0" showCloseButton={false} aria-describedby={undefined}>
+          <DialogContent className="w-[900px] max-w-[900px] sm:max-w-[900px] max-h-[95vh] overflow-y-auto p-0" showCloseButton={false} aria-describedby={undefined}>
             <DialogHeader className="px-6 pt-6 pb-2">
               <DialogTitle className="text-sm font-medium text-slate-700">시험 성적서 발급</DialogTitle>
             </DialogHeader>
@@ -1646,25 +1646,27 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
     generateCertificateNo().then(setCertificateNo)
   }, [])
 
-  const loadTemplate = async () => {
+  const loadTemplate = async (targetType: QcType = qcType) => {
     if (!productCode) {
       toast.error('제품을 선택해주세요')
       return
     }
 
-    if (isPetType) {
+    setQcType(targetType)
+
+    if (isPetQcType(targetType)) {
       setResults(createPetDefaultRows())
       setStep(2)
       return
     }
 
-    if (isStabilityType) {
+    if (isStabilityQcType(targetType)) {
       setResults(createStabilityDefaultRows())
       setStep(2)
       return
     }
 
-    if (isMltType) {
+    if (isMltQcType(targetType)) {
       setResults(createMltDefaultRows())
       setStep(2)
       return
@@ -1672,7 +1674,7 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
 
     setLoadingSpecs(true)
     try {
-      const { specs, error } = await fetchQcSpecsTemplate(productCode, qcType)
+      const { specs, error } = await fetchQcSpecsTemplate(productCode, targetType)
       if (error) {
         toast.error(error)
         return
@@ -1889,7 +1891,7 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
   if (step === 1) {
     return (
       <div className="px-6 pb-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-[1fr_220px] gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700">제품 선택</label>
             {loadingProducts ? (
@@ -1912,34 +1914,47 @@ function CertificateForm({ onComplete }: CertificateFormProps) {
             )}
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">성적서 유형</label>
-            <Select value={qcType} onValueChange={(v) => setQcType(v as QcType)}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {QC_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>{QC_TYPE_LABEL[t]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label className="text-sm font-medium text-slate-700">성적서 번호</label>
+            <Input
+              value={certificateNo}
+              onChange={(e) => setCertificateNo(e.target.value)}
+              className="h-9 font-mono"
+            />
           </div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">성적서 번호</label>
-          <Input
-            value={certificateNo}
-            onChange={(e) => setCertificateNo(e.target.value)}
-            className="h-9 font-mono"
-          />
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <Button onClick={loadTemplate} disabled={!productCode || loadingSpecs} className="gap-1 bg-amber-500 hover:bg-amber-600">
-            {loadingSpecs ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-            시험기준 불러오기
-          </Button>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium text-slate-700">성적서 유형</label>
+            <p className="text-xs text-slate-500">탭을 클릭하면 해당 시험기준을 바로 불러옵니다.</p>
+          </div>
+          <Tabs value={qcType} onValueChange={(value) => setQcType(value as QcType)}>
+            <TabsList className="grid h-auto w-full grid-cols-6 bg-slate-100 p-1">
+              {QC_TYPES.map((type) => (
+                <TabsTrigger
+                  key={type}
+                  value={type}
+                  disabled={loadingSpecs}
+                  onClick={() => void loadTemplate(type)}
+                  className="h-9 text-xs data-[state=active]:bg-white data-[state=active]:text-amber-700"
+                >
+                  {loadingSpecs && qcType === type ? (
+                    <Loader2 size={12} className="mr-1 animate-spin" />
+                  ) : null}
+                  {QC_TYPE_LABEL[type]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {QC_TYPES.map((type) => (
+              <TabsContent key={type} value={type} className="mt-3">
+                <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                  {productCode
+                    ? `${QC_TYPE_LABEL[type]} 탭을 클릭하면 기준/기본 행이 로드되고 입력 화면으로 이동합니다.`
+                    : '먼저 제품을 선택한 뒤 성적서 유형 탭을 클릭하세요.'}
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
         </div>
       </div>
     )
