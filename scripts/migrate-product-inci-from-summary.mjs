@@ -273,21 +273,7 @@ function buildInciRows(bomItems) {
 }
 
 function buildDeclaration(rows, field) {
-  const seen = new Set()
-  const values = []
-
-  for (const row of rows) {
-    const value = textOrNull(row[field])
-    if (!value) continue
-
-    const key = normalizeKey(value)
-    if (seen.has(key)) continue
-
-    seen.add(key)
-    values.push(value)
-  }
-
-  return values.join(', ')
+  return rows.map((row) => row[field]).filter(Boolean).join(', ')
 }
 
 function buildPayload(productCode, rows, existing) {
