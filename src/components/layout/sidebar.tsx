@@ -87,11 +87,9 @@ const navItems: NavItem[] = [
   },
 
   {
-    title: '관리',
+    title: '사용자 관리',
+    href: '/v2/admin/users',
     icon: Users,
-    children: [
-      { title: '사용자 관리', href: '/v2/admin/users' },
-    ],
   },
 ]
 
