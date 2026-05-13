@@ -58,6 +58,7 @@ export default function V2PifPage() {
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState<PifStatus>('active')
   const [selectedProductCodes, setSelectedProductCodes] = useState<Set<string>>(new Set())
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
   const [editingCell, setEditingCell] = useState<{
     productCode: string
     field: string
@@ -122,6 +123,7 @@ export default function V2PifPage() {
     setSearch(searchInput)
     setPage(1)
     setSelectedProductCodes(new Set())
+    setLastSelectedIndex(null)
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -173,13 +175,40 @@ export default function V2PifPage() {
     setStatus(value === 'inactive' ? 'inactive' : 'active')
     setPage(1)
     setSelectedProductCodes(new Set())
+    setLastSelectedIndex(null)
   }
 
-  const toggleProductSelection = (productCode: string, checked: boolean) => {
+  const toggleProductSelection = (productCode: string, checked: boolean, index: number) => {
     const next = new Set(selectedProductCodes)
     if (checked) next.add(productCode)
     else next.delete(productCode)
     setSelectedProductCodes(next)
+    setLastSelectedIndex(index)
+  }
+
+  const handleProductSelectionClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    productCode: string,
+    index: number
+  ) => {
+    if (!event.shiftKey || lastSelectedIndex === null) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const shouldSelect = !selectedProductCodes.has(productCode)
+    const [from, to] = [lastSelectedIndex, index].sort((a, b) => a - b)
+    const next = new Set(selectedProductCodes)
+
+    for (const product of products.slice(from, to + 1)) {
+      if (shouldSelect) next.add(product.product_code)
+      else next.delete(product.product_code)
+    }
+
+    setSelectedProductCodes(next)
+    setLastSelectedIndex(index)
   }
 
   const toggleVisibleSelection = (checked: boolean) => {
@@ -189,6 +218,7 @@ export default function V2PifPage() {
       else next.delete(product.product_code)
     }
     setSelectedProductCodes(next)
+    setLastSelectedIndex(null)
   }
 
   const bulkTargetStatus: PifStatus = status === 'active' ? 'inactive' : 'active'
@@ -388,7 +418,7 @@ export default function V2PifPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products.map((product) => (
+                  {products.map((product, index) => (
                     <TableRow
                       key={product.id}
                       className="border-b border-[#E5E5E5] hover:bg-[#F9F9F9]/50"
@@ -398,7 +428,10 @@ export default function V2PifPage() {
                           <Checkbox
                             checked={selectedProductCodes.has(product.product_code)}
                             onCheckedChange={(value) =>
-                              toggleProductSelection(product.product_code, value === true)
+                              toggleProductSelection(product.product_code, value === true, index)
+                            }
+                            onClick={(event) =>
+                              handleProductSelectionClick(event, product.product_code, index)
                             }
                             aria-label={`${product.product_code} 선택`}
                             className="h-4 w-4"

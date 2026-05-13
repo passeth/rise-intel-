@@ -1,7 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  fetchSupplierDocumentStatusForProduct,
+  type MissingDocDetail,
+  type SupplierDocumentStatus,
+} from '@/app/v2/pif/documents/actions'
 import { fetchPifProducts, type PifProduct } from '@/app/v2/pif/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,8 +33,10 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Eye,
   ExternalLink,
+  FileWarning,
   FileText,
   History,
   Loader2,
@@ -57,6 +65,27 @@ type PreviewDocument = {
   productCode?: string
   productName?: string
 }
+
+type SupplierDocKey = 'COA' | 'MSDS' | 'Composition' | 'IFRA'
+
+type SupplierDocType = {
+  key: SupplierDocKey
+  label: string
+  countKey: 'coa_count' | 'msds_count' | 'composition_count' | 'ifra_count'
+  coverageKey: 'coa_coverage' | 'msds_coverage' | 'composition_coverage' | 'ifra_coverage'
+}
+
+const SUPPLIER_DOC_TYPES: SupplierDocType[] = [
+  { key: 'COA', label: 'COA', countKey: 'coa_count', coverageKey: 'coa_coverage' },
+  { key: 'MSDS', label: 'MSDS', countKey: 'msds_count', coverageKey: 'msds_coverage' },
+  {
+    key: 'Composition',
+    label: 'Composition',
+    countKey: 'composition_count',
+    coverageKey: 'composition_coverage',
+  },
+  { key: 'IFRA', label: 'IFRA', countKey: 'ifra_count', coverageKey: 'ifra_coverage' },
+]
 
 function renderDash(value: string | null): string {
   if (!value || value.trim().length === 0) {
@@ -110,6 +139,119 @@ function ProductTableEmptyState({ hasSearch }: { hasSearch: boolean }) {
   )
 }
 
+function getCoverageClasses(coverage: number): string {
+  if (coverage >= 80) return 'bg-green-50 text-green-700 border-green-200'
+  if (coverage >= 50) return 'bg-amber-50 text-amber-700 border-amber-200'
+  return 'bg-red-50 text-red-700 border-red-200'
+}
+
+function formatCoverage(value: number): string {
+  return `${value.toFixed(1)}%`
+}
+
+function hasSupplierDocument(detail: MissingDocDetail, documentType: SupplierDocKey): boolean {
+  return !detail.missing.includes(documentType)
+}
+
+function SupplierDocumentOverview({ status }: { status: SupplierDocumentStatus }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {SUPPLIER_DOC_TYPES.map((documentType) => {
+        const completed = status[documentType.countKey]
+        const missing = Math.max(0, status.total_ingredients - completed)
+        const coverage = status[documentType.coverageKey]
+
+        return (
+          <article
+            key={documentType.key}
+            className="rounded-md border border-[#E5E5E5] bg-white p-3 shadow-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-[#666666]">{documentType.label}</p>
+              <Badge variant="outline" className={`h-5 px-2 text-[10px] ${getCoverageClasses(coverage)}`}>
+                {formatCoverage(coverage)}
+              </Badge>
+            </div>
+            <div className="mt-2 flex items-end justify-between gap-2">
+              <p className="font-mono text-lg font-bold text-[#1A1A1A]">
+                {completed}/{status.total_ingredients}
+              </p>
+              <p className="text-[11px] text-[#999999]">미비 {missing}</p>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function SupplierDocumentMissingTable({ details }: { details: MissingDocDetail[] }) {
+  if (details.length === 0) {
+    return (
+      <div className="rounded-md border border-green-200 bg-green-50 px-4 py-5 text-sm text-green-700">
+        모든 원료의 업체 서류가 충족되었습니다.
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-[#E5E5E5]">
+      <div className="flex items-center gap-2 border-b border-[#E5E5E5] bg-[#F9F9F9] px-3 py-2">
+        <FileWarning className="h-4 w-4 text-amber-600" />
+        <p className="text-xs font-semibold text-[#666666]">
+          서류 미비 원료 상세 ({details.length.toLocaleString()})
+        </p>
+      </div>
+      <div className="max-h-[420px] overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 bg-white">
+            <TableRow className="border-b border-[#E5E5E5]">
+              <TableHead className="w-36 text-xs font-semibold text-[#666666]">원료코드</TableHead>
+              <TableHead className="min-w-[220px] text-xs font-semibold text-[#666666]">원료명</TableHead>
+              {SUPPLIER_DOC_TYPES.map((documentType) => (
+                <TableHead
+                  key={documentType.key}
+                  className="w-24 text-center text-xs font-semibold text-[#666666]"
+                >
+                  {documentType.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {details.map((detail) => (
+              <TableRow key={detail.ingredient_code} className="border-b border-[#EFEFEF]">
+                <TableCell className="font-mono text-xs">
+                  <Link
+                    href={`/v2/ingredients/${detail.ingredient_code}`}
+                    className="text-blue-600 hover:underline"
+                  >
+                    {detail.ingredient_code}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-xs text-[#1A1A1A]">
+                  {renderDash(detail.ingredient_name)}
+                </TableCell>
+                {SUPPLIER_DOC_TYPES.map((documentType) => {
+                  const hasDoc = hasSupplierDocument(detail, documentType.key)
+
+                  return (
+                    <TableCell key={documentType.key} className="text-center text-xs">
+                      <span className={`font-semibold ${hasDoc ? 'text-green-600' : 'text-red-500'}`}>
+                        {hasDoc ? '✓' : '✗'}
+                      </span>
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+}
+
 export default function V2PifCpnpPage() {
   const queryClient = useQueryClient()
   const autoDocumentTypes = useMemo(
@@ -132,6 +274,7 @@ export default function V2PifCpnpPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [previewDocument, setPreviewDocument] = useState<PreviewDocument | null>(null)
+  const [documentStatusProductCode, setDocumentStatusProductCode] = useState<string | null>(null)
 
   const historyQuery = useQuery({
     queryKey: ['cpnp-history'],
@@ -144,9 +287,15 @@ export default function V2PifCpnpPage() {
     enabled: Boolean(previewDocument?.productCode),
   })
 
+  const documentStatusQuery = useQuery({
+    queryKey: ['cpnp-supplier-document-status', documentStatusProductCode],
+    queryFn: () => fetchSupplierDocumentStatusForProduct(documentStatusProductCode ?? ''),
+    enabled: Boolean(documentStatusProductCode),
+  })
+
   const { data, isLoading } = useQuery({
-    queryKey: ['cpnp-products', search, page],
-    queryFn: () => fetchPifProducts(search, page, PAGE_SIZE),
+    queryKey: ['cpnp-products', search, page, 'active'],
+    queryFn: () => fetchPifProducts(search, page, PAGE_SIZE, 'active'),
   })
 
   const mutation = useMutation({
@@ -440,6 +589,18 @@ export default function V2PifCpnpPage() {
           <TableCell className="font-mono text-xs text-[#666666]">
             {renderDash(product.semi_product_code)}
           </TableCell>
+          <TableCell className="text-xs">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setDocumentStatusProductCode(product.product_code)}
+              className="h-7 border-[#DADADA] px-2 text-xs"
+            >
+              <ClipboardCheck className="mr-1 h-3.5 w-3.5" />
+              업체서류
+            </Button>
+          </TableCell>
         </TableRow>
       )
     })
@@ -571,6 +732,9 @@ export default function V2PifCpnpPage() {
                       </TableHead>
                       <TableHead className="w-28 text-xs font-semibold text-[#666666]">
                         반제품코드
+                      </TableHead>
+                      <TableHead className="w-28 text-xs font-semibold text-[#666666]">
+                        업체서류
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -851,6 +1015,97 @@ export default function V2PifCpnpPage() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={documentStatusProductCode !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDocumentStatusProductCode(null)
+          }
+        }}
+      >
+        <DialogContent className="flex h-[min(820px,calc(100vh-2rem))] w-[min(1060px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden rounded-md border-[#DADADA] p-0">
+          <DialogHeader className="border-b border-[#E5E5E5] bg-white px-5 py-4 pr-12">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Badge className="h-5 bg-blue-100 px-2 text-[10px] text-blue-700 hover:bg-blue-100">
+                업체서류
+              </Badge>
+              <DialogTitle className="truncate text-sm font-semibold text-[#1A1A1A]">
+                품목 업체 서류 현황
+              </DialogTitle>
+              {documentStatusProductCode && (
+                <span className="font-mono text-xs text-[#666666]">
+                  {documentStatusProductCode}
+                </span>
+              )}
+            </div>
+            <DialogDescription className="text-xs text-[#999999]">
+              CPNP 생성 전 품목별 업체 서류 충족률과 미비 원료를 확인합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-auto bg-[#F7F7F7] p-5">
+            {documentStatusQuery.isLoading ? (
+              <div className="flex h-full min-h-80 items-center justify-center text-sm text-[#666666]">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                업체 서류 현황을 불러오는 중...
+              </div>
+            ) : documentStatusQuery.isError ? (
+              <div className="flex h-full min-h-80 items-center justify-center gap-2 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                업체 서류 현황을 불러오지 못했습니다.
+              </div>
+            ) : !documentStatusQuery.data ? (
+              <div className="flex h-full min-h-80 items-center justify-center text-sm text-[#999999]">
+                조회 가능한 업체 서류 현황이 없습니다.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <section className="rounded-md border border-[#E5E5E5] bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div>
+                      <p className="font-mono text-xs font-semibold text-[#1A1A1A]">
+                        {documentStatusQuery.data.product_code}
+                      </p>
+                      <h3 className="mt-1 text-base font-bold text-[#1A1A1A]">
+                        {renderDash(documentStatusQuery.data.korean_name)}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-[#666666]">
+                        {renderDash(documentStatusQuery.data.english_name)}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`h-6 px-2 text-[11px] ${getCoverageClasses(
+                          documentStatusQuery.data.overall_coverage
+                        )}`}
+                      >
+                        전체 {formatCoverage(documentStatusQuery.data.overall_coverage)}
+                      </Badge>
+                      <Badge variant="outline" className="h-6 border-[#DADADA] px-2 text-[11px] text-[#666666]">
+                        원료 {documentStatusQuery.data.total_ingredients.toLocaleString()}개
+                      </Badge>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <div className="mb-2 flex items-center gap-2">
+                    <ClipboardCheck className="h-4 w-4 text-[#666666]" />
+                    <h4 className="text-sm font-semibold text-[#1A1A1A]">항목별 개요</h4>
+                  </div>
+                  <SupplierDocumentOverview status={documentStatusQuery.data} />
+                </section>
+
+                <section>
+                  <SupplierDocumentMissingTable details={documentStatusQuery.data.missing_details} />
+                </section>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={previewDocument !== null}

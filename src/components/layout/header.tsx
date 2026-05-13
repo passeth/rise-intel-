@@ -15,6 +15,7 @@ import { Menu, LogOut, User } from 'lucide-react'
 // Role labels in Korean
 const roleLabels: Record<string, string> = {
   admin: '관리자',
+  monitoring: '모니터링',
   production_manager: '생산매니저',
   materials_manager: '자재관리',
   manufacturing_team: '제조팀',

@@ -12,6 +12,7 @@ import {
   Brain,
   Scale,
   ChevronDown,
+  Users,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -52,6 +53,7 @@ const navItems: NavItem[] = [
       { title: '원료 리스트', href: '/v2/ingredients' },
       { title: '입고 관리대장', href: '/v2/ingredients/receipts' },
       { title: '원료 문서 등록', href: '/v2/ingredients/documents' },
+      { title: '화장품원료 정보조회', href: '/v2/ingredients/registry' },
       { title: '신규 원료 등록', href: '/v2/ingredients/new' },
     ],
   },
@@ -81,6 +83,14 @@ const navItems: NavItem[] = [
       { title: 'Daily News', href: '/v2/intel/news' },
       { title: '성분 인텔리전스', href: '/v2/intel/ingredients' },
       { title: 'Product Report', href: '/v2/intel/reports' },
+    ],
+  },
+
+  {
+    title: '관리',
+    icon: Users,
+    children: [
+      { title: '사용자 관리', href: '/v2/admin/users' },
     ],
   },
 ]

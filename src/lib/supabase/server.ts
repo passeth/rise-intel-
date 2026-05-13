@@ -5,6 +5,7 @@ import type { Database } from '@/types/supabase'
 // Types matching UserProvider
 export type AppRole = 
   | 'admin' 
+  | 'monitoring'
   | 'production_manager' 
   | 'materials_manager' 
   | 'manufacturing_team' 

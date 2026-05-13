@@ -6,6 +6,7 @@ import type { User } from '@supabase/supabase-js'
 
 export type AppRole = 
   | 'admin' 
+  | 'monitoring'
   | 'production_manager' 
   | 'materials_manager' 
   | 'manufacturing_team' 

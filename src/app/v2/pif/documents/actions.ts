@@ -71,6 +71,8 @@ const SELECT_COLUMNS = [
 
 const DEFAULT_PAGE_SIZE = 50
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
 function normalizeIngredientCode(code: string): string {
   if (/^[A-Z]{3}-[0-9]{4}[A-Z]-/.test(code)) {
     return code.replace(/[A-Z]-[0-9]+[A-Z]*$/, '')
@@ -124,6 +126,44 @@ export async function fetchSupplierDocumentStatus(
     return { items: [], total: count ?? 0 }
   }
 
+  return {
+    items: await buildSupplierDocumentStatusItems(supabase, products),
+    total: count ?? 0,
+  }
+}
+
+export async function fetchSupplierDocumentStatusForProduct(
+  productCode: string
+): Promise<SupplierDocumentStatus | null> {
+  const trimmedProductCode = productCode.trim()
+  if (!trimmedProductCode) {
+    return null
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('labdoc_products')
+    .select(SELECT_COLUMNS)
+    .eq('product_code', trimmedProductCode)
+    .maybeSingle()
+
+  if (error) {
+    console.error('fetchSupplierDocumentStatusForProduct product error:', error)
+    return null
+  }
+
+  if (!data) {
+    return null
+  }
+
+  const [item] = await buildSupplierDocumentStatusItems(supabase, [data as unknown as ProductRow])
+  return item ?? null
+}
+
+async function buildSupplierDocumentStatusItems(
+  supabase: SupabaseServerClient,
+  products: ProductRow[]
+): Promise<SupplierDocumentStatus[]> {
   const semiProductCodes = Array.from(
     new Set(products.map((product) => product.semi_product_code).filter((code): code is string => Boolean(code)))
   )
@@ -256,9 +296,5 @@ export async function fetchSupplierDocumentStatus(
       missing_details: missingDetails,
     }
   })
-
-  return {
-    items,
-    total: count ?? 0,
-  }
+  return items
 }

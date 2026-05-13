@@ -145,9 +145,19 @@ export async function fetchManageProducts(
   const from = Math.max(0, page - 1) * pageSize
   const to = from + pageSize - 1
 
-  let query = supabase
-    .from('labdoc_products')
-    .select(SELECT_COLUMNS, { count: 'exact' })
+  const buildQuery = (activeOnly: boolean) => {
+    let nextQuery = supabase
+      .from('labdoc_products')
+      .select(SELECT_COLUMNS, { count: 'exact' })
+
+    if (activeOnly) {
+      nextQuery = nextQuery.eq('pif_status', 'active')
+    }
+
+    return nextQuery
+  }
+
+  let query = buildQuery(true)
 
   const trimmedSearch = search.trim()
   if (trimmedSearch.length > 0) {
@@ -164,9 +174,18 @@ export async function fetchManageProducts(
   const sortField = options?.sortField ?? 'management_code'
   const sortDirection = options?.sortDirection ?? 'asc'
 
-  const { data, count, error } = await query
+  let { data, count, error } = await query
     .order(sortField, { ascending: sortDirection === 'asc', nullsFirst: false })
     .range(from, to)
+
+  if (error && error.message.includes('pif_status')) {
+    const fallback = await buildQuery(false)
+      .order(sortField, { ascending: sortDirection === 'asc', nullsFirst: false })
+      .range(from, to)
+    data = fallback.data
+    count = fallback.count
+    error = fallback.error
+  }
 
   if (error) {
     console.error('fetchManageProducts error:', error)
