@@ -103,9 +103,11 @@ function getTotalDocCount(item: LabIngredientRow): number {
 function DocumentStatusChips({
   ingredient,
   emptyClassName = 'text-[#E5E5E5] text-[10px]',
+  onPreview,
 }: {
   ingredient: LabIngredientRow
   emptyClassName?: string
+  onPreview?: (url: string, title: string) => void
 }) {
   const docCount = getTotalDocCount(ingredient)
 
@@ -118,10 +120,34 @@ function DocumentStatusChips({
       {DOC_CATEGORIES.map((cat) => {
         const count = ingredient[cat.key]?.length ?? 0
         if (count === 0) return null
+        const firstUrl = ingredient[cat.key]?.[0]
+        const title = `${ingredient.ingredient_code} ${cat.label}`
+        const className =
+          'inline-flex items-center gap-0.5 rounded border border-[#E5E5E5] bg-[#F9F9F9] px-1.5 py-0.5 text-[10px] text-[#666666] transition-colors hover:bg-[#E5E5E5] whitespace-nowrap'
+
+        if (onPreview && firstUrl) {
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              className={className}
+              title={`${cat.label} 미리보기${count > 1 ? ` (${count}건 중 첫 문서)` : ''}`}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onPreview(firstUrl, title)
+              }}
+            >
+              {cat.short}
+              <span className="font-semibold text-[#1A1A1A]">{count}</span>
+            </button>
+          )
+        }
+
         return (
           <span
             key={cat.key}
-            className="inline-flex items-center gap-0.5 rounded border border-[#E5E5E5] bg-[#F9F9F9] px-1.5 py-0.5 text-[10px] text-[#666666] transition-colors hover:bg-[#E5E5E5] whitespace-nowrap"
+            className={className}
           >
             {cat.short}
             <span className="font-semibold text-[#1A1A1A]">{count}</span>
@@ -129,6 +155,72 @@ function DocumentStatusChips({
         )
       })}
     </div>
+  )
+}
+
+function DocumentPreviewDialog({
+  url,
+  title,
+  onClose,
+}: {
+  url: string
+  title: string
+  onClose: () => void
+}) {
+  const fileName = decodeURIComponent(url.split('/').pop() || 'document')
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent
+        className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] p-0 flex flex-col border border-[#E5E5E5]"
+        showCloseButton={false}
+        aria-describedby={undefined}
+      >
+        <DialogHeader className="px-4 py-3 border-b border-[#E5E5E5] bg-[#F9F9F9] flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-sm font-medium truncate pr-4 text-[#1A1A1A]">
+              {title} · {fileName}
+            </DialogTitle>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs text-[#666666] hover:text-[#1A1A1A]"
+                asChild
+              >
+                <a href={url} download>
+                  <Download size={14} className="mr-1" /> 다운로드
+                </a>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs text-[#666666] hover:text-[#1A1A1A]"
+                onClick={() => window.open(url, '_blank')}
+              >
+                <ExternalLink size={14} className="mr-1" /> 새창
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-[#999999] hover:text-[#1A1A1A]"
+                onClick={onClose}
+              >
+                <X size={16} />
+              </Button>
+            </div>
+          </div>
+        </DialogHeader>
+        <div className="flex-1 min-h-0">
+          <iframe src={url} className="w-full h-full border-0" title={fileName} />
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -432,6 +524,7 @@ export default function V2IngredientsPage() {
   const [listView, setListView] = useState<IngredientListView>('inci-expanded')
   const [selectedIngredientCodes, setSelectedIngredientCodes] = useState<Set<string>>(new Set())
   const [docModalItem, setDocModalItem] = useState<LabIngredientRow | null>(null)
+  const [previewDocument, setPreviewDocument] = useState<{ url: string; title: string } | null>(null)
   const router = useRouter()
 
   const { data, isLoading } = useQuery({
@@ -712,8 +805,6 @@ export default function V2IngredientsPage() {
                   </TableHeader>
                   <TableBody>
                     {ingredients.map((ingredient) => {
-                      const docCount = getTotalDocCount(ingredient)
-
                       return (
                         <TableRow
                           key={ingredient.id}
@@ -758,12 +849,12 @@ export default function V2IngredientsPage() {
                             className="py-3 align-top"
                             onClick={(event) => {
                               event.stopPropagation()
-                              if (docCount > 0) setDocModalItem(ingredient)
                             }}
                           >
                             <DocumentStatusChips
                               ingredient={ingredient}
                               emptyClassName="text-[#DADADA] text-xs"
+                              onPreview={(url, title) => setPreviewDocument({ url, title })}
                             />
                           </TableCell>
                           <TableCell className="py-3 align-top">
@@ -861,7 +952,6 @@ export default function V2IngredientsPage() {
                   {ingredients.map((ingredient) => {
                     const components = ingredient.components ?? []
                     const componentCount = Math.max(components.length, 1)
-                    const docCount = getTotalDocCount(ingredient)
 
                     return (
                       <Fragment key={ingredient.id}>
@@ -943,10 +1033,12 @@ export default function V2IngredientsPage() {
                                     className="w-[220px] py-2 align-middle"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (docCount > 0) setDocModalItem(ingredient)
                                     }}
                                   >
-                                    <DocumentStatusChips ingredient={ingredient} />
+                                    <DocumentStatusChips
+                                      ingredient={ingredient}
+                                      onPreview={(url, title) => setPreviewDocument({ url, title })}
+                                    />
                                   </TableCell>
                                   <TableCell
                                     rowSpan={componentCount}
@@ -1026,6 +1118,13 @@ export default function V2IngredientsPage() {
           onUploaded={() => {
             queryClient.invalidateQueries({ queryKey: ['v2-ingredients'] })
           }}
+        />
+      )}
+      {previewDocument && (
+        <DocumentPreviewDialog
+          url={previewDocument.url}
+          title={previewDocument.title}
+          onClose={() => setPreviewDocument(null)}
         />
       )}
     </div>
