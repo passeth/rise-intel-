@@ -1168,22 +1168,32 @@ function DocumentContent({
     <StandardDocument
       key={product.product_code}
       productDetail={productDetail}
+      inciRows={inciMerged}
       onSave={onSaveStandard}
       isSaving={isSavingStandard}
+      onSaveInciOrder={onSaveInciOrder}
+      isSavingInciOrder={isSavingFunction}
     />
   )
 }
 
 function StandardDocument({
   productDetail,
+  inciRows,
   onSave,
   isSaving,
+  onSaveInciOrder,
+  isSavingInciOrder,
 }: {
   productDetail: ProductDetailData | undefined
+  inciRows: InciMergedRow[]
   onSave: (values: Record<string, string | number | null>) => void
   isSaving: boolean
+  onSaveInciOrder: (items: Array<{ id: string; declaredOrder: number }>) => void
+  isSavingInciOrder: boolean
 }) {
   const product = productDetail?.product
+  const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<Record<string, string>>(() =>
     product ? productToStandardForm(product) : {}
   )
@@ -1202,6 +1212,7 @@ function StandardDocument({
   const handleSave = () => {
     const specificGravity = normalizeText(form.specific_gravity || '')
     const specificGravityNumber = specificGravity ? Number(specificGravity) : null
+    setIsEditing(false)
     onSave({
       ...Object.fromEntries(
         Object.entries(form)
@@ -1216,50 +1227,82 @@ function StandardDocument({
     })
   }
 
+  const handleCancelEdit = () => {
+    setForm(productToStandardForm(product))
+    setIsEditing(false)
+  }
+
+  const fieldsDisabled = !isEditing || isSaving
+
   return (
     <div className="space-y-4">
       <section className="border border-[#E5E5E5] bg-white p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold text-[#1A1A1A]">제품표준서 항목 수정</div>
+            <div className="text-xs font-semibold text-[#1A1A1A]">제품표준서 항목</div>
             <p className="mt-1 text-[11px] text-[#999999]">
-              제품코드 변경 시 연결된 PIF 문서 테이블의 제품코드도 함께 갱신합니다.
+              기본은 읽기 전용입니다. 수정 버튼을 누르면 입력 항목이 활성화됩니다.
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="h-8 bg-[#1A1A1A] text-xs text-white hover:bg-[#333333]"
-          >
-            {isSaving ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                  className="h-8 text-xs"
+                >
+                  취소
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="h-8 bg-[#1A1A1A] text-xs text-white hover:bg-[#333333]"
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  저장
+                </Button>
+              </>
             ) : (
-              <Save className="h-3.5 w-3.5 mr-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+                disabled={isSaving}
+                className="h-8 text-xs"
+              >
+                수정
+              </Button>
             )}
-            저장
-          </Button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <StandardInput label="제품코드" value={form.product_code} onChange={(v) => updateField('product_code', v)} />
-          <StandardInput label="관리번호" value={form.management_code} onChange={(v) => updateField('management_code', v)} />
-          <StandardInput label="제품명" value={form.korean_name} onChange={(v) => updateField('korean_name', v)} />
-          <StandardInput label="영문명" value={form.english_name} onChange={(v) => updateField('english_name', v)} />
-          <StandardInput label="유형" value={form.cosmetic_type} onChange={(v) => updateField('cosmetic_type', v)} />
-          <StandardInput label="성상" value={form.appearance} onChange={(v) => updateField('appearance', v)} />
-          <StandardInput label="표시용량" value={form.label_volume} onChange={(v) => updateField('label_volume', v)} />
-          <StandardInput label="충진용량" value={form.fill_volume} onChange={(v) => updateField('fill_volume', v)} />
-          <StandardInput label="사용기한" value={form.shelf_life} onChange={(v) => updateField('shelf_life', v)} />
-          <StandardInput label="pH" value={form.ph_standard} onChange={(v) => updateField('ph_standard', v)} />
-          <StandardInput label="점도" value={form.viscosity_standard} onChange={(v) => updateField('viscosity_standard', v)} />
-          <StandardInput label="비중" value={form.specific_gravity} onChange={(v) => updateField('specific_gravity', v)} />
-          <StandardInput label="포장단위" value={form.packaging_unit} onChange={(v) => updateField('packaging_unit', v)} />
-          <StandardInput label="용량/용법" value={form.dosage} onChange={(v) => updateField('dosage', v)} />
-          <StandardTextarea label="사용법" value={form.usage_instructions} onChange={(v) => updateField('usage_instructions', v)} />
-          <StandardTextarea label="효능효과" value={form.functional_claim} onChange={(v) => updateField('functional_claim', v)} />
-          <StandardTextarea label="보관방법" value={form.storage_method} onChange={(v) => updateField('storage_method', v)} />
-          <StandardTextarea label="사용상 주의사항" value={form.usage_precautions} onChange={(v) => updateField('usage_precautions', v)} />
-          <StandardTextarea label="비고" value={form.remarks} onChange={(v) => updateField('remarks', v)} />
+          <StandardInput label="제품코드" value={form.product_code} disabled={fieldsDisabled} onChange={(v) => updateField('product_code', v)} />
+          <StandardInput label="관리번호" value={form.management_code} disabled={fieldsDisabled} onChange={(v) => updateField('management_code', v)} />
+          <StandardInput label="제품명" value={form.korean_name} disabled={fieldsDisabled} onChange={(v) => updateField('korean_name', v)} />
+          <StandardInput label="영문명" value={form.english_name} disabled={fieldsDisabled} onChange={(v) => updateField('english_name', v)} />
+          <StandardInput label="유형" value={form.cosmetic_type} disabled={fieldsDisabled} onChange={(v) => updateField('cosmetic_type', v)} />
+          <StandardInput label="성상" value={form.appearance} disabled={fieldsDisabled} onChange={(v) => updateField('appearance', v)} />
+          <StandardInput label="표시용량" value={form.label_volume} disabled={fieldsDisabled} onChange={(v) => updateField('label_volume', v)} />
+          <StandardInput label="충진용량" value={form.fill_volume} disabled={fieldsDisabled} onChange={(v) => updateField('fill_volume', v)} />
+          <StandardInput label="사용기한" value={form.shelf_life} disabled={fieldsDisabled} onChange={(v) => updateField('shelf_life', v)} />
+          <StandardInput label="pH" value={form.ph_standard} disabled={fieldsDisabled} onChange={(v) => updateField('ph_standard', v)} />
+          <StandardInput label="점도" value={form.viscosity_standard} disabled={fieldsDisabled} onChange={(v) => updateField('viscosity_standard', v)} />
+          <StandardInput label="비중" value={form.specific_gravity} disabled={fieldsDisabled} onChange={(v) => updateField('specific_gravity', v)} />
+          <StandardInput label="포장단위" value={form.packaging_unit} disabled={fieldsDisabled} onChange={(v) => updateField('packaging_unit', v)} />
+          <StandardInput label="용량/용법" value={form.dosage} disabled={fieldsDisabled} onChange={(v) => updateField('dosage', v)} />
+          <StandardTextarea label="사용법" value={form.usage_instructions} disabled={fieldsDisabled} onChange={(v) => updateField('usage_instructions', v)} />
+          <StandardTextarea label="효능효과" value={form.functional_claim} disabled={fieldsDisabled} onChange={(v) => updateField('functional_claim', v)} />
+          <StandardTextarea label="보관방법" value={form.storage_method} disabled={fieldsDisabled} onChange={(v) => updateField('storage_method', v)} />
+          <StandardTextarea label="사용상 주의사항" value={form.usage_precautions} disabled={fieldsDisabled} onChange={(v) => updateField('usage_precautions', v)} />
+          <StandardTextarea label="비고" value={form.remarks} disabled={fieldsDisabled} onChange={(v) => updateField('remarks', v)} />
         </div>
       </section>
 
@@ -1331,6 +1374,15 @@ function StandardDocument({
             </div>
           </div>
         </div>
+        <div className="border-t border-[#E5E5E5] p-3">
+          <SubOnePercentOrderEditor
+            key={inciRows.map((row) => `${row.id ?? row.key}:${row.declaredOrder ?? ''}`).join('|')}
+            rows={inciRows}
+            onSaveOrder={onSaveInciOrder}
+            isSaving={isSavingInciOrder}
+            compact
+          />
+        </div>
       </section>
     </div>
   )
@@ -1363,16 +1415,18 @@ function productToStandardForm(product: ProductDetailProduct): Record<string, st
 function StandardInput({
   label,
   value,
+  disabled,
   onChange,
 }: {
   label: string
   value?: string
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   return (
     <label className="space-y-1 text-xs">
       <span className="text-[#666666]">{label}</span>
-      <Input value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="h-8 text-xs" />
+      <Input value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)} className="h-8 text-xs disabled:bg-[#F9F9F9] disabled:text-[#1A1A1A] disabled:opacity-100" />
     </label>
   )
 }
@@ -1380,17 +1434,96 @@ function StandardInput({
 function StandardTextarea({
   label,
   value,
+  disabled,
   onChange,
 }: {
   label: string
   value?: string
+  disabled?: boolean
   onChange: (value: string) => void
 }) {
   return (
     <label className="space-y-1 text-xs md:col-span-2">
       <span className="text-[#666666]">{label}</span>
-      <Textarea value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="min-h-20 text-xs" />
+      <Textarea value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)} className="min-h-20 text-xs disabled:bg-[#F9F9F9] disabled:text-[#1A1A1A] disabled:opacity-100" />
     </label>
+  )
+}
+
+function SubOnePercentOrderEditor({
+  rows,
+  onSaveOrder,
+  isSaving,
+  compact = false,
+}: {
+  rows: InciMergedRow[]
+  onSaveOrder: (items: Array<{ id: string; declaredOrder: number }>) => void
+  isSaving: boolean
+  compact?: boolean
+}) {
+  const fixedCount = rows.filter((row) => !row.isBelowOnePercent).length
+  const [orderedRows, setOrderedRows] = useState(() => rows.filter((row) => row.isBelowOnePercent && row.id))
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+
+  const moveRow = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return
+    setOrderedRows((current) => {
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const saveOrder = () => {
+    onSaveOrder(
+      orderedRows
+        .filter((row): row is InciMergedRow & { id: string } => Boolean(row.id))
+        .map((row, index) => ({ id: row.id, declaredOrder: fixedCount + index + 1 }))
+    )
+  }
+
+  return (
+    <div className={compact ? 'space-y-2' : 'space-y-3'}>
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+        1% 이상 성분은 함량순으로 고정됩니다. 아래 1% 미만 INCI만 드래그해서 표시 순서를 변경한 뒤 저장하세요.
+      </div>
+      {orderedRows.length === 0 ? (
+        <div className="px-3 py-8 text-center text-xs text-[#999999]">1% 미만 INCI 데이터가 없습니다.</div>
+      ) : (
+        <div className="space-y-1">
+          {orderedRows.map((row, index) => (
+            <div
+              key={row.id ?? row.inciName}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragIndex !== null) moveRow(dragIndex, index)
+                setDragIndex(null)
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className={`grid cursor-grab grid-cols-[48px_1fr_96px] items-center gap-3 rounded-md border px-3 py-2 text-xs active:cursor-grabbing ${
+                dragIndex === index ? 'border-amber-400 bg-amber-100' : 'border-[#E5E5E5] bg-white hover:bg-amber-50'
+              }`}
+            >
+              <div className="text-center font-mono text-[#999999]">#{index + 1}</div>
+              <div>
+                <div className="font-medium text-[#1A1A1A]">{row.inciName}</div>
+                <div className="text-[10px] text-[#999999]">CAS: {row.casNo}</div>
+              </div>
+              <div className="text-right font-mono text-amber-700">{row.wtPercent.toFixed(5)}%</div>
+            </div>
+          ))}
+          <div className="flex justify-end pt-2">
+            <Button disabled={isSaving} onClick={saveOrder} className="h-8 text-xs">
+              {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+              순서 저장
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
