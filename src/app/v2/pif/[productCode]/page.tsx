@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -35,10 +35,12 @@ import {
 import {
   fetchProductDetail,
   updateProductFunctions,
+  updateProductInciItemOrders,
   updateProductStandard,
   type NormalizedBomItem,
   type ProductDetailData,
   type ProductDetailProduct,
+  type ProductInciItem,
   type ProductQcSpec,
 } from './actions'
 import { fetchPifProducts, type PifProduct } from '../actions'
@@ -87,18 +89,15 @@ type AllergenRow = {
   wtPercent: number
 }
 
-type InciFunctionRef = {
-  ingredientCode: string
-  componentId?: string
-}
-
 type InciMergedRow = {
+  id?: string
   key: string
   inciName: string
   casNo: string
   functionName: string
   wtPercent: number
-  functionRefs: InciFunctionRef[]
+  isBelowOnePercent: boolean
+  declaredOrder?: number
 }
 
 const DOC_ITEMS: DocItem[] = [
@@ -249,6 +248,20 @@ export default function V2PifDetailPage() {
     onError: (error: Error) => toast.error(error.message || 'Function 저장에 실패했습니다'),
   })
 
+
+  const inciOrderMutation = useMutation({
+    mutationFn: updateProductInciItemOrders,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error || 'INCI 순서 저장에 실패했습니다')
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ['pif-product-detail', decodedProductCode] })
+      toast.success('1% 미만 INCI 표시 순서를 저장했습니다')
+    },
+    onError: (error: Error) => toast.error(error.message || 'INCI 순서 저장에 실패했습니다'),
+  })
+
   const printMutation = useMutation({
     mutationFn: async () => {
       window.print()
@@ -388,24 +401,41 @@ export default function V2PifDetailPage() {
   }, [finalSpecs, product])
 
   const inciMerged = useMemo<InciMergedRow[]>(() => {
+    const inciItems = data?.inciItems ?? []
+    if (inciItems.length > 0) {
+      return inciItems
+        .map((item: ProductInciItem) => ({
+          id: item.id,
+          key: item.id,
+          inciName: item.inci_name_en || item.inci_name_ko || item.merge_key,
+          casNo: item.cas_no || '-',
+          functionName: item.function_name || '-',
+          wtPercent: Number(item.wt_percent ?? 0),
+          isBelowOnePercent: item.is_below_one_percent,
+          declaredOrder: item.declared_order,
+        }))
+        .sort((a, b) => (a.declaredOrder ?? 0) - (b.declaredOrder ?? 0))
+    }
+
     const merged = new Map<string, InciMergedRow>()
 
     for (const item of bom) {
       const rawWtPercent = toWeightPercent(item.totalUsemount)
       if (item.components.length === 0) {
-        const key = `raw:${item.baseCode}:${item.materialname}`
+        const key = item.materialname
         const existing = merged.get(key)
         if (existing) {
           existing.wtPercent += rawWtPercent
+          existing.isBelowOnePercent = existing.wtPercent < 1
           continue
         }
         merged.set(key, {
           key,
           inciName: item.materialname,
           casNo: '-',
-          functionName: item.productFunction || '-',
+          functionName: '-',
           wtPercent: rawWtPercent,
-          functionRefs: [{ ingredientCode: item.baseCode }],
+          isBelowOnePercent: rawWtPercent < 1,
         })
         continue
       }
@@ -421,7 +451,7 @@ export default function V2PifDetailPage() {
         const existing = merged.get(key)
         if (existing) {
           existing.wtPercent += ingredientWt
-          existing.functionRefs.push({ ingredientCode: item.baseCode, componentId: component.id })
+          existing.isBelowOnePercent = existing.wtPercent < 1
           const nextFunctions = Array.from(
             new Set(
               [existing.functionName, component.function]
@@ -441,13 +471,13 @@ export default function V2PifDetailPage() {
           casNo: component.cas_number || '-',
           functionName: component.function || '-',
           wtPercent: ingredientWt,
-          functionRefs: [{ ingredientCode: item.baseCode, componentId: component.id }],
+          isBelowOnePercent: ingredientWt < 1,
         })
       }
     }
 
     return Array.from(merged.values()).sort((a, b) => b.wtPercent - a.wtPercent)
-  }, [bom])
+  }, [bom, data?.inciItems])
 
   const activeDoc: DocId = isValidDocId(selectedDoc) ? selectedDoc : 'standard'
 
@@ -701,7 +731,10 @@ export default function V2PifDetailPage() {
               onSaveProductFunction={(entries) =>
                 functionMutation.mutate({ productCode: decodedProductCode, entries })
               }
-              isSavingFunction={functionMutation.isPending}
+              onSaveInciOrder={(items) =>
+                inciOrderMutation.mutate({ productCode: decodedProductCode, items })
+              }
+              isSavingFunction={functionMutation.isPending || inciOrderMutation.isPending}
             />
           </div>
         </main>
@@ -782,6 +815,7 @@ function DocumentContent({
   onSaveStandard,
   isSavingStandard,
   onSaveProductFunction,
+  onSaveInciOrder,
   isSavingFunction,
 }: {
   activeDoc: DocId
@@ -804,7 +838,8 @@ function DocumentContent({
   processSteps: ProductDetailData['process']['steps']
   onSaveStandard: (values: Record<string, string | number | null>) => void
   isSavingStandard: boolean
-  onSaveProductFunction: (entries: Array<InciFunctionRef & { functionValue: string | null }>) => void
+  onSaveProductFunction: (entries: Array<{ ingredientCode: string; functionValue: string | null }>) => void
+  onSaveInciOrder: (items: Array<{ id: string; declaredOrder: number }>) => void
   isSavingFunction: boolean
 }) {
   const product = productDetail?.product
@@ -977,8 +1012,10 @@ function DocumentContent({
       <InciMergedProductFunctionPanel
         key={product.product_code}
         rows={inciMerged}
+        bom={productDetail?.bom ?? []}
         onSave={onSaveProductFunction}
         isSaving={isSavingFunction}
+        onSaveOrder={onSaveInciOrder}
       />
     )
   }
@@ -1359,93 +1396,251 @@ function StandardTextarea({
 
 function InciMergedProductFunctionPanel({
   rows,
+  bom,
   onSave,
   isSaving,
+  onSaveOrder,
 }: {
   rows: InciMergedRow[]
-  onSave: (entries: Array<InciFunctionRef & { functionValue: string | null }>) => void
+  bom: NormalizedBomItem[]
+  onSave: (entries: Array<{ ingredientCode: string; functionValue: string | null }>) => void
   isSaving: boolean
+  onSaveOrder: (items: Array<{ id: string; declaredOrder: number }>) => void
 }) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const defaultDrafts = useMemo(
-    () =>
-      Object.fromEntries(
-        rows.map((row) => [row.key, row.functionName === '-' ? '' : row.functionName])
-      ),
-    [rows]
-  )
+  const [mode, setMode] = useState<'view' | 'function' | 'order'>('view')
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => bomToProductFunctionDrafts(bom))
+  const [belowOneRows, setBelowOneRows] = useState(() => rows.filter((row) => row.isBelowOnePercent && row.id))
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    setDrafts(bomToProductFunctionDrafts(bom))
+  }, [bom])
+
+  useEffect(() => {
+    setBelowOneRows(rows.filter((row) => row.isBelowOnePercent && row.id))
+  }, [rows])
+
+  const updateDraft = (ingredientCode: string, value: string) => {
+    setDrafts((prev) => ({ ...prev, [ingredientCode]: value }))
+  }
+
+  const saveItem = (item: NormalizedBomItem) => {
+    onSave([{ ingredientCode: item.baseCode, functionValue: drafts[item.baseCode] || null }])
+  }
+
+  const moveBelowOneRow = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return
+    setBelowOneRows((current) => {
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const saveBelowOneOrder = () => {
+    const fixedCount = rows.filter((row) => !row.isBelowOnePercent).length
+    onSaveOrder(
+      belowOneRows
+        .filter((row): row is InciMergedRow & { id: string } => Boolean(row.id))
+        .map((row, index) => ({ id: row.id, declaredOrder: fixedCount + index + 1 }))
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
-        INCI 합산 행의 Function을 수정하면 연결된 제품별 원료/컴포넌트 Function에 함께 저장됩니다.
+    <section className="border border-[#E5E5E5] bg-white">
+      <div className="flex flex-col gap-2 border-b border-[#E5E5E5] bg-[#F9F9F9] px-3 py-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-xs font-medium text-[#666666]">INCI 합산 / 품목 Function / 1% 미만 순서</div>
+          <p className="mt-1 text-[11px] text-[#999999]">
+            1% 미만 INCI는 노란색으로 표시되며, 순서 편집 탭에서 드래그해 표시 순서를 조정할 수 있습니다.
+          </p>
+        </div>
+        <div className="inline-flex rounded-md border border-[#D4D4D4] bg-white p-0.5 text-xs">
+          {[
+            ['view', '보기'],
+            ['function', '품목 Function 편집'],
+            ['order', '1% 미만 순서 편집'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setMode(value as 'view' | 'function' | 'order')}
+              className={`rounded px-3 py-1.5 transition-colors ${
+                mode === value ? 'bg-[#1A1A1A] text-white' : 'text-[#666666] hover:bg-[#F5F5F5]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="overflow-x-auto border border-[#E5E5E5] bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-[#F9F9F9] text-[#666666]">
-            <tr className="border-b border-[#E5E5E5]">
-              <th className="w-12 px-3 py-2 text-center font-medium">No</th>
-              <th className="px-3 py-2 text-left font-medium">INCI Name</th>
-              <th className="px-3 py-2 text-left font-medium">CAS No</th>
-              <th className="min-w-[260px] px-3 py-2 text-left font-medium">Function</th>
-              <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
-              <th className="w-20 px-3 py-2 text-center font-medium">저장</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <EmptyRow message="INCI 데이터가 없습니다." colSpan={6} />
-            ) : (
-              rows.map((row, index) => {
-                const draftValue = drafts[row.key] ?? defaultDrafts[row.key] ?? ''
-                return (
-                  <tr key={row.key} className="border-b border-[#E5E5E5] last:border-b-0">
-                    <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
-                    <td className="px-3 py-2 text-[#1A1A1A]">{row.inciName}</td>
-                    <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
-                    <td className="px-3 py-2">
-                      <Input
-                        value={draftValue}
-                        onChange={(event) =>
-                          setDrafts((prev) => ({ ...prev, [row.key]: event.target.value }))
-                        }
-                        className="h-8 text-xs"
-                        placeholder="제품별 Function"
-                      />
-                      <div className="mt-1 text-[10px] text-[#999999]">
-                        연결 {row.functionRefs.length.toLocaleString()}개
+
+      {mode === 'view' && <InciMergedReadonlyTable rows={rows} />}
+
+      {mode === 'function' && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-[#F9F9F9] text-[#666666]">
+              <tr className="border-b border-[#E5E5E5]">
+                <th className="px-3 py-2 text-left font-medium">품목코드</th>
+                <th className="px-3 py-2 text-left font-medium">성분/원료 품목</th>
+                <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
+                <th className="px-3 py-2 text-left font-medium">Master Function</th>
+                <th className="px-3 py-2 text-left font-medium">제품별 Function</th>
+                <th className="px-3 py-2 w-20 text-center font-medium">저장</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bom.length === 0 ? (
+                <EmptyRow message="BOM 데이터가 없습니다." colSpan={6} />
+              ) : (
+                bom.map((item) => (
+                  <tr key={item.baseCode} className="border-b border-[#E5E5E5] last:border-b-0">
+                    <td className="px-3 py-2 font-mono text-[#666666]">{item.baseCode}</td>
+                    <td className="px-3 py-2 text-[#1A1A1A]">
+                      <div className="font-medium">{item.materialname}</div>
+                      <div className="mt-0.5 max-w-[520px] truncate text-[10px] text-[#999999]">
+                        {item.components.length > 0
+                          ? item.components
+                              .map((component) => component.inci_name_en || component.inci_name_kr)
+                              .filter(Boolean)
+                              .join(', ')
+                          : '컴포넌트 없음'}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-[#1A1A1A]">
-                      {row.wtPercent.toFixed(5)}
+                      {toWeightPercent(item.totalUsemount).toFixed(5)}
+                    </td>
+                    <td className="px-3 py-2 text-[#666666]">{renderDash(item.defaultFunction)}</td>
+                    <td className="px-3 py-2">
+                      <Input
+                        value={drafts[item.baseCode] ?? ''}
+                        onChange={(event) => updateDraft(item.baseCode, event.target.value)}
+                        className="h-8 min-w-56 text-xs"
+                        placeholder={item.defaultFunction || '이 제품에서의 Function'}
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={isSaving}
-                        onClick={() =>
-                          onSave(
-                            row.functionRefs.map((ref) => ({
-                              ...ref,
-                              functionValue: draftValue || null,
-                            }))
-                          )
-                        }
+                        onClick={() => saveItem(item)}
                         className="h-8 text-xs"
                       >
-                        저장
+                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '저장'}
                       </Button>
                     </td>
                   </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {mode === 'order' && (
+        <div className="space-y-3 p-3">
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            1% 이상 성분은 함량순으로 고정됩니다. 아래 목록의 1% 미만 INCI만 드래그해서 순서를 변경한 뒤 저장하세요.
+          </div>
+          {belowOneRows.length === 0 ? (
+            <div className="px-3 py-8 text-center text-xs text-[#999999]">1% 미만 INCI 데이터가 없습니다.</div>
+          ) : (
+            <div className="space-y-1">
+              {belowOneRows.map((row, index) => (
+                <div
+                  key={row.id ?? row.inciName}
+                  draggable
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (dragIndex !== null) moveBelowOneRow(dragIndex, index)
+                    setDragIndex(null)
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  className={`grid cursor-grab grid-cols-[48px_1fr_96px] items-center gap-3 rounded-md border px-3 py-2 text-xs active:cursor-grabbing ${
+                    dragIndex === index ? 'border-amber-400 bg-amber-100' : 'border-[#E5E5E5] bg-white hover:bg-amber-50'
+                  }`}
+                >
+                  <div className="text-center font-mono text-[#999999]">#{index + 1}</div>
+                  <div>
+                    <div className="font-medium text-[#1A1A1A]">{row.inciName}</div>
+                    <div className="text-[10px] text-[#999999]">CAS: {row.casNo}</div>
+                  </div>
+                  <div className="text-right font-mono text-amber-700">{row.wtPercent.toFixed(5)}%</div>
+                </div>
+              ))}
+              <div className="flex justify-end pt-2">
+                <Button disabled={isSaving} onClick={saveBelowOneOrder} className="h-8 text-xs">
+                  {isSaving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                  순서 저장
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function InciMergedReadonlyTable({ rows }: { rows: InciMergedRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="bg-[#F9F9F9] text-[#666666]">
+          <tr className="border-b border-[#E5E5E5]">
+            <th className="px-3 py-2 w-12 text-center font-medium">No</th>
+            <th className="px-3 py-2 text-left font-medium">INCI Name</th>
+            <th className="px-3 py-2 text-left font-medium">CAS No</th>
+            <th className="px-3 py-2 text-left font-medium">Function</th>
+            <th className="px-3 py-2 text-right font-medium">%(W/W)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <EmptyRow message="INCI 데이터가 없습니다." colSpan={5} />
+          ) : (
+            rows.map((row, index) => (
+              <tr
+                key={`${row.inciName}-${index}`}
+                className={`border-b border-[#E5E5E5] last:border-b-0 ${
+                  row.isBelowOnePercent ? 'bg-amber-50/70' : ''
+                }`}
+              >
+                <td className="px-3 py-2 text-center text-[#666666]">{index + 1}</td>
+                <td className="px-3 py-2 text-[#1A1A1A]">
+                  <div className="flex items-center gap-2">
+                    <span>{row.inciName}</span>
+                    {row.isBelowOnePercent && (
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        &lt;1%
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-2 font-mono text-[#666666]">{row.casNo}</td>
+                <td className="px-3 py-2 text-[#666666]">{row.functionName}</td>
+                <td className={`px-3 py-2 text-right font-mono ${row.isBelowOnePercent ? 'text-amber-700' : 'text-[#1A1A1A]'}`}>
+                  {row.wtPercent.toFixed(5)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   )
+}
+
+function bomToProductFunctionDrafts(bom: NormalizedBomItem[]): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const item of bom) {
+    next[item.baseCode] = item.productFunction ?? ''
+  }
+  return next
 }
 
 async function downloadDocumentPdf({
