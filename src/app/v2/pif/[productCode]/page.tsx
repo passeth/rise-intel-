@@ -793,15 +793,6 @@ export default function V2PifDetailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={openDerivedProductDialog}
-                    className="h-8 text-xs"
-                  >
-                    <Copy className="h-3.5 w-3.5 mr-1" />
-                    복사해서 품목 추가
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
                     onClick={() => pdfMutation.mutate()}
                     disabled={pdfMutation.isPending}
                     className="h-8 text-xs"
